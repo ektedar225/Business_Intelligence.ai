@@ -1,0 +1,27 @@
+kpi_id: units_sold
+display_name: Units Sold
+definition_business: "Total units invoiced, net of returns, order-line grain, day granularity."
+formula: "SUM(units) - SUM(returned_units)"
+grain: {entity: order_line, time: day}
+calendar: gregorian
+additivity: additive
+hierarchy:
+  parent: net_revenue
+  children: [region]
+  decomposition: null
+dimensions: [region, channel, category, sku, customer_segment]
+registered_drivers:
+  - {id: promo_calendar, type: controllable,   lever: promo_depth,  lag_days: [0, 14]}
+  - {id: stockout_rate,  type: controllable,   lever: safety_stock, lag_days: [0, 7]}
+  - {id: seasonality,    type: uncontrollable, lever: null,         lag_days: [0, 0]}
+materiality:
+  min_business_impact_usd: 40
+  min_surprise_z: 1.8
+  min_history_periods: 26
+lineage: [raw.orders]
+entitlements:
+  row_policy: "region_in(user.regions)"
+  column_masks: {}
+owner: vp_revenue_ops
+monitoring_default: {watch: [units_sold], window_days: 14}
+version: 1

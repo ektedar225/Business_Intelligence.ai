@@ -1,0 +1,29 @@
+kpi_id: cac
+display_name: Customer Acquisition Cost
+definition_business: "Marketing spend divided by new customers acquired in the same week. Spans the orders and marketing sources at weekly grain."
+formula: "SUM(marketing_spend) / COUNT(DISTINCT new_customer_id)"
+grain: {entity: customer_segment, time: week}
+calendar: iso_week
+additivity: non_additive
+hierarchy:
+  parent: null
+  children: []
+  decomposition: null
+dimensions: [region, product_family, customer_segment]
+registered_drivers:
+  - {id: campaign_spend_change, type: controllable, lever: marketing_budget, lag_days: [0, 14]}
+  - {id: new_sku_launch,        type: uncontrollable, lever: null,           lag_days: [0, 0]}
+materiality:
+  min_business_impact_usd: 300
+  min_surprise_z: 1.2
+  min_history_periods: 26
+sparse_history_mode:
+  fallback: plan_vs_actual_and_peer_cohort
+  confidence_cap: low
+lineage: [raw.orders, raw.marketing]
+entitlements:
+  row_policy: "region_in(user.regions)"
+  column_masks: {}
+owner: vp_growth
+monitoring_default: {watch: [cac], window_days: 28}
+version: 1

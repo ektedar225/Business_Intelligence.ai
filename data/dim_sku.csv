@@ -1,0 +1,6 @@
+sku,product_family,category,base_price
+SKU-1001,family_a,Electronics,120.0
+SKU-4471,family_b,Electronics,95.0
+SKU-4472,family_b,Electronics,80.0
+SKU-2001,family_c,Home,45.0
+SKU-3001,family_d,Apparel,30.0

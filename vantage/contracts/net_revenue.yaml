@@ -1,0 +1,29 @@
+kpi_id: net_revenue
+display_name: Net Revenue
+definition_business: "Gross invoiced value less returns and discounts, order-line grain, day granularity."
+formula: "SUM(gross_amount) - SUM(returns_amount) - SUM(discount_amount)"
+grain: {entity: order_line, time: day}
+calendar: gregorian
+additivity: additive
+hierarchy:
+  parent: null
+  children: [region]
+  decomposition: "units * asp"
+dimensions: [region, channel, category, sku, customer_segment]
+registered_drivers:
+  - {id: promo_calendar,   type: controllable,   lever: promo_depth,       lag_days: [0, 14]}
+  - {id: stockout_rate,    type: controllable,   lever: safety_stock,      lag_days: [0, 7]}
+  - {id: channel_mix,      type: controllable,   lever: channel_incentive, lag_days: [0, 30]}
+  - {id: competitor_price, type: uncontrollable, lever: null,              lag_days: [7, 28]}
+  - {id: seasonality,      type: uncontrollable, lever: null,              lag_days: [0, 0]}
+materiality:
+  min_business_impact_usd: 3000
+  min_surprise_z: 1.5
+  min_history_periods: 26
+lineage: [raw.orders]
+entitlements:
+  row_policy: "region_in(user.regions)"
+  column_masks: {customer_segment: "hash_if_not(role='analyst')"}
+owner: vp_revenue_ops
+monitoring_default: {watch: [net_revenue, units_sold], window_days: 14}
+version: 1

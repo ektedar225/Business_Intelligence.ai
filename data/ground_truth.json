@@ -1,0 +1,46 @@
+{
+  "ground_truth": {
+    "total_delta_usd": -5758.019908812712,
+    "total_delta_pct": -0.08694666671830954,
+    "prior_week_revenue": 66224.73438191239,
+    "current_week_revenue": 60466.71447309968,
+    "drivers": [
+      {
+        "driver_id": "promo_calendar",
+        "label": "Promo campaign ended (SKU-1001, AMER)",
+        "true_dollar_impact": -3774.3364957330377,
+        "true_share": 0.655492088514035
+      },
+      {
+        "driver_id": "stockout_rate",
+        "label": "SKU-4471 stockout in DE warehouse",
+        "true_dollar_impact": -1637.3748929628305,
+        "true_share": 0.28436422917829973
+      },
+      {
+        "driver_id": "channel_mix",
+        "label": "Mix shift toward lower-ASP marketplace channel",
+        "true_dollar_impact": -827.6428808610709,
+        "true_share": 0.14373741216044678
+      },
+      {
+        "driver_id": "noise",
+        "label": "Unattributable / residual noise",
+        "true_dollar_impact": 481.3343607442275,
+        "true_share": -0.08359372985278152
+      }
+    ]
+  },
+  "meta": {
+    "as_of": "2026-08-02T23:00:00+00:00",
+    "current_week_start": "2026-07-27",
+    "prior_week_start": "2026-07-20",
+    "gm_stale_warehouse": "DE",
+    "gm_sla_hours": 6.0,
+    "gm_actual_staleness_hours": 26.0,
+    "new_family": "family_e",
+    "new_family_launch_week": 28,
+    "current_week_idx": 30,
+    "prior_week_idx": 29
+  }
+}

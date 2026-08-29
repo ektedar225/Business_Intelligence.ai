@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+.DS_Store
+.venv/
+venv/
+*.egg-info/
+6a882073d90c9_accenture_innovation_challenge_round_2_detailed_problem_statements_final.pdf

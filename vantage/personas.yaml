@@ -1,0 +1,51 @@
+- persona_id: cfo
+  display_name: "CFO"
+  role: leadership
+  word_budget: 90
+  depth: summary
+  vocabulary_level: executive
+  metric_scope: {regions: [EMEA, AMER, APAC], categories: all}
+  decision_rights: [pricing_policy, budget_reallocation, headcount]
+  lever_rights: []
+  column_masks: []
+  channel: [digest, push]
+  cadence: weekly
+
+- persona_id: regional_director_emea
+  display_name: "Regional Sales Director (EMEA)"
+  role: regional_sales
+  word_budget: 140
+  depth: segment
+  vocabulary_level: operational
+  metric_scope: {regions: [EMEA], categories: all}
+  decision_rights: [discount_envelope, rep_focus, promo_request]
+  lever_rights: [channel_incentive]
+  column_masks: [customer_segment]
+  channel: [alert, mobile]
+  cadence: daily
+
+- persona_id: category_manager
+  display_name: "Category Manager"
+  role: product
+  word_budget: 160
+  depth: sku
+  vocabulary_level: operational
+  metric_scope: {regions: [EMEA, AMER, APAC], categories: all}
+  decision_rights: [assortment, price_ladder, promo_calendar]
+  lever_rights: [promo_depth, safety_stock]
+  column_masks: []
+  channel: [conversational]
+  cadence: on_demand
+
+- persona_id: analyst
+  display_name: "Data Analyst"
+  role: analyst
+  word_budget: 400
+  depth: full
+  vocabulary_level: technical
+  metric_scope: {regions: [EMEA, AMER, APAC], categories: all}
+  decision_rights: [model_config, thresholds, contract_edits]
+  lever_rights: []
+  column_masks: []
+  channel: [workbench]
+  cadence: on_demand

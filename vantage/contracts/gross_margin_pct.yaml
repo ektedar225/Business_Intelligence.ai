@@ -1,0 +1,28 @@
+kpi_id: gross_margin_pct
+display_name: Gross Margin %
+definition_business: "(Net revenue - cost of goods sold) / net revenue. Non-additive: recomputed from summed components at every dimension, never averaged."
+formula: "(net_revenue - SUM(units * unit_cost)) / net_revenue"
+grain: {entity: sku_day, time: day}
+calendar: gregorian
+additivity: non_additive
+hierarchy:
+  parent: null
+  children: [region]
+  decomposition: null
+dimensions: [region, category, sku]
+registered_drivers:
+  - {id: unit_cost_change, type: uncontrollable, lever: null,            lag_days: [0, 0]}
+  - {id: channel_mix,      type: controllable,   lever: channel_incentive, lag_days: [0, 30]}
+  - {id: promo_calendar,   type: controllable,   lever: promo_depth,     lag_days: [0, 14]}
+materiality:
+  min_business_impact_usd: 800
+  min_surprise_z: 1.5
+  min_history_periods: 26
+lineage: [raw.orders, raw.supply_cost]
+entitlements:
+  row_policy: "region_in(user.regions)"
+  column_masks: {}
+owner: vp_finance
+monitoring_default: {watch: [gross_margin_pct], window_days: 14}
+freshness_sla_hours: 6
+version: 1

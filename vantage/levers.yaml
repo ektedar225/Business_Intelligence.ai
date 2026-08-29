@@ -1,0 +1,43 @@
+- lever_id: promo_depth
+  driver_id: promo_calendar
+  owner_role: product
+  lead_time_days: 3
+  cost_to_pull: low
+  expected_impact: {point: 4.5, ci_low: 2.0, ci_high: 7.0, unit: pct_revenue_recovery, source: elasticity_model}
+  constraints: ["requires promo budget approval above $50k", "max 2 promo restarts per quarter per SKU"]
+  default_monitoring_plan: {watch_metrics: [net_revenue, units_sold], window_days: 14,
+                             success_threshold: "units_sold within 5% of pre-promo-end baseline",
+                             rollback_trigger: "no recovery after 14 days"}
+
+- lever_id: safety_stock
+  driver_id: stockout_rate
+  owner_role: product
+  lead_time_days: 7
+  cost_to_pull: medium
+  expected_impact: {point: 3.1, ci_low: 1.2, ci_high: 5.0, unit: pct_revenue_recovery, source: elasticity_model}
+  constraints: ["warehouse replenishment lead time 5-7 days", "requires supply-chain sign-off"]
+  default_monitoring_plan: {watch_metrics: [stockout_rate, units_sold], window_days: 7,
+                             success_threshold: "DE stockout_rate below 2%",
+                             rollback_trigger: "stockout persists beyond 10 days"}
+
+- lever_id: channel_incentive
+  driver_id: channel_mix
+  owner_role: regional_sales
+  lead_time_days: 14
+  cost_to_pull: medium
+  expected_impact: {point: 1.8, ci_low: 0.5, ci_high: 3.0, unit: pct_revenue_recovery, source: elasticity_model}
+  constraints: ["incentive budget capped at $30k/quarter per region"]
+  default_monitoring_plan: {watch_metrics: [asp, channel_mix], window_days: 30,
+                             success_threshold: "direct-channel share back above 60%",
+                             rollback_trigger: "no shift after 30 days"}
+
+- lever_id: marketing_budget
+  driver_id: campaign_spend_change
+  owner_role: growth
+  lead_time_days: 5
+  cost_to_pull: medium
+  expected_impact: {point: -8.0, ci_low: -15.0, ci_high: -2.0, unit: pct_cac_change, source: elasticity_model}
+  constraints: ["budget reallocation requires growth-lead approval"]
+  default_monitoring_plan: {watch_metrics: [cac], window_days: 28,
+                             success_threshold: "CAC back within plan band",
+                             rollback_trigger: "CAC unchanged after 28 days"}

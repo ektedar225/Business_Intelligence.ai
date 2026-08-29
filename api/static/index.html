@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>VANTAGE — KPI Intelligence-to-Action Engine</title>
+<style>
+  :root {
+    --bg: #0b0f17; --panel: #121826; --panel2: #1a2233; --border: #263047;
+    --text: #e6ebf5; --muted: #93a1bd; --accent: #5b8cff; --accent2: #7cf0c2;
+    --warn: #ffb84d; --bad: #ff6b6b; --good: #5be08f;
+    --mono: "SF Mono", "Fira Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  header { padding: 18px 28px; border-bottom: 1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; }
+  header h1 { font-size: 20px; margin:0; letter-spacing: 0.5px; }
+  header .tag { color: var(--muted); font-size: 12.5px; margin-top:2px; }
+  .telemetry-strip { display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color: var(--muted); }
+  .telemetry-strip b { color: var(--accent2); font-weight:600; }
+  main { max-width: 1180px; margin: 0 auto; padding: 20px 24px 60px; }
+  .row { display:flex; gap:16px; flex-wrap:wrap; }
+  .col { flex:1; min-width: 320px; }
+  .card { background: var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px 18px; margin-bottom:16px; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:0.6px; color:var(--muted); margin:0 0 12px; }
+  .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .tab, select, button, input[type=text] { background: var(--panel2); border:1px solid var(--border); color:var(--text); padding:8px 14px; border-radius:7px; cursor:pointer; font-size:13px; }
+  .tab.active { background: var(--accent); border-color: var(--accent); color:#08101f; font-weight:600; }
+  button:hover, .tab:hover { border-color: var(--accent); }
+  select { cursor:pointer; }
+  .headline { font-size: 19px; font-weight:600; margin-bottom:6px; }
+  .subline { color: var(--muted); font-size:13.5px; margin-bottom:14px; }
+  .why-item { border-left:3px solid var(--accent); padding:8px 12px; margin-bottom:8px; background: var(--panel2); border-radius:0 6px 6px 0; font-size:13.5px; }
+  .evidence-chip { display:inline-block; background:#22304a; color:var(--accent2); border-radius:5px; padding:1px 7px; font-family:var(--mono); font-size:11.5px; cursor:pointer; margin-left:4px; }
+  .evidence-chip:hover { background: var(--accent); color:#08101f; }
+  .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:11.5px; font-weight:700; letter-spacing:0.4px; }
+  .badge.high { background: #16331f; color: var(--good); }
+  .badge.medium { background: #332b16; color: var(--warn); }
+  .badge.low { background: #331616; color: var(--bad); }
+  .badge.abstain { background: #3a1030; color: #ff8ad1; }
+  .kv { display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0; border-bottom:1px dashed var(--border); color:var(--muted); }
+  .kv b { color: var(--text); font-weight:500; }
+  table { width:100%; border-collapse: collapse; font-size:12.5px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); }
+  th { color: var(--muted); font-weight:600; text-transform:uppercase; font-size:10.5px; letter-spacing:0.4px; }
+  .pill { font-family: var(--mono); font-size:11px; background:var(--panel2); padding:2px 6px; border-radius:4px; }
+  .action-card { background: var(--panel2); border-radius:8px; padding:10px 12px; margin-bottom:8px; font-size:13px; }
+  .escalation { opacity:0.75; border-left:3px solid var(--warn); padding-left:10px; margin-bottom:6px; font-size:12.5px; }
+  .muted { color: var(--muted); }
+  .flex-between { display:flex; justify-content:space-between; align-items:center; }
+  #evidenceDrawer { position:fixed; right:0; top:0; height:100%; width:360px; background:var(--panel); border-left:1px solid var(--border); transform:translateX(100%); transition:transform .2s ease; padding:18px; overflow-y:auto; z-index:50; }
+  #evidenceDrawer.open { transform:translateX(0); }
+  #overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); display:none; z-index:40; }
+  #overlay.open { display:block; }
+  .close-btn { float:right; cursor:pointer; color:var(--muted); }
+  .fw-pass { color: var(--good); font-weight:700; }
+  .fw-fail { color: var(--bad); font-weight:700; }
+  pre.narr { white-space:pre-wrap; font-family:var(--mono); font-size:12.5px; background:var(--panel2); padding:12px; border-radius:8px; line-height:1.5; }
+  .thumb { cursor:pointer; padding:2px 6px; border-radius:5px; background:var(--panel2); font-size:12px; margin-left:6px;}
+  .thumb:hover { background: var(--accent); color:#08101f; }
+  .footer-note { color: var(--muted); font-size:11.5px; margin-top:24px; text-align:center; }
+  code { font-family: var(--mono); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>VANTAGE</h1>
+    <div class="tag">KPI Intelligence-to-Action Engine — the LLM never touches a number.</div>
+  </div>
+  <div class="telemetry-strip" id="telemetryStrip">loading telemetry…</div>
+</header>
+
+<main>
+  <div class="tabs" id="scenarioTabs"></div>
+
+  <div class="row">
+    <div class="col" style="flex:2">
+      <div class="card">
+        <div class="flex-between">
+          <h2>Narrative</h2>
+          <select id="personaSelect"></select>
+        </div>
+        <div id="narrativePanel">Loading…</div>
+      </div>
+
+      <div class="card" id="actionsCard">
+        <h2>Recommended Actions &amp; Escalations</h2>
+        <div id="actionsPanel"></div>
+      </div>
+
+      <div class="card">
+        <h2>Ask VANTAGE (conversational entry — same engine, mode A demo)</h2>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="askInput" placeholder="e.g. how is performance this week?" style="flex:1"/>
+          <button onclick="askQuestion()">Ask</button>
+        </div>
+        <div id="askResult" style="margin-top:10px; font-size:13px;"></div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <h2>Confidence</h2>
+        <div id="confidencePanel"></div>
+      </div>
+
+      <div class="card">
+        <h2>Numeric Firewall</h2>
+        <div id="firewallPanel" class="muted" style="font-size:12.5px;">Select a scenario with a narrative to check.</div>
+        <button style="margin-top:10px;" onclick="runFirewallDemo()">Run live violation-injection demo</button>
+        <div id="firewallDemoResult" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="card">
+        <h2>Entitlement Scope</h2>
+        <div id="entitlementPanel"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <h2>Recovery Scorecard (Scenario 1 — ground truth was injected, this is measured)</h2>
+        <div id="scorecardPanel">Loading…</div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h2>Governance moment: naive average vs. grain-safe recompute (Gross Margin %)</h2>
+        <div id="naivePanel">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <h2>Feedback loop (reject a driver, watch the ranking learn)</h2>
+        <div id="feedbackPanel"></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h2>Audit Ledger (hash-chained, append-only)</h2>
+        <div id="auditPanel" style="max-height:260px; overflow-y:auto;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">Prototype for Accenture Innovation Challenge 2026 — Round 2, Track 3 (BusinessIntelligence.ai). All figures are computed from synthetic data with injected ground truth.</div>
+</main>
+
+<div id="overlay" onclick="closeDrawer()"></div>
+<div id="evidenceDrawer">
+  <span class="close-btn" onclick="closeDrawer()">✕ close</span>
+  <div id="evidenceContent"></div>
+</div>
+
+<script>
+const API = '';
+let state = { scenario: '1', persona: 'cfo', bundle: null, personas: [] };
+
+async function jget(path) { const r = await fetch(API + path); return r.json(); }
+async function jpost(path, body) { const r = await fetch(API + path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)}); return r.json(); }
+
+const SCENARIOS = [
+  {id:'1', label:'1 · Multi-factor movement'},
+  {id:'2', label:'2 · Abstain (stale feed)'},
+  {id:'3', label:'3 · Sparse history'},
+];
+
+function renderTabs() {
+  const el = document.getElementById('scenarioTabs');
+  el.innerHTML = '';
+  SCENARIOS.forEach(s => {
+    const b = document.createElement('div');
+    b.className = 'tab' + (s.id === state.scenario ? ' active' : '');
+    b.textContent = s.label;
+    b.onclick = () => { state.scenario = s.id; renderTabs(); loadScenario(); };
+    el.appendChild(b);
+  });
+}
+
+async function loadPersonas() {
+  state.personas = await jget('/api/personas');
+  const sel = document.getElementById('personaSelect');
+  sel.innerHTML = state.personas.map(p => `<option value="${p.persona_id}">${p.display_name}</option>`).join('');
+  sel.value = state.persona;
+  sel.onchange = () => { state.persona = sel.value; loadScenario(); };
+}
+
+function fmtMoney(v) { if (v===null||v===undefined) return '—'; const s = Math.abs(v) >= 1000 ? (v/1000).toFixed(1)+'k' : v.toFixed(0); return (v<0?'-$':'$') + s.replace('-',''); }
+function pct(v) { return (v===null||v===undefined) ? '—' : (v*100).toFixed(1)+'%'; }
+
+function linkifyEvidence(text) {
+  return text.replace(/\[(E-\d+)\]/g, (m, id) => `<span class="evidence-chip" onclick="showEvidence('${id}')">${id}</span>`);
+}
+
+async function loadScenario() {
+  document.getElementById('narrativePanel').innerHTML = 'Loading…';
+  const data = await jget(`/api/scenario/${state.scenario}?persona_id=${state.persona}`);
+  state.bundle = data.bundle;
+  state.lastResponse = data;
+  renderNarrative(data);
+  renderConfidence(data.bundle.confidence, data.bundle.data_quality_flags);
+  renderActions(data.actions, data.abstention);
+  renderFirewall(data.firewall);
+  renderEntitlement(data.bundle.entitlement_scope);
+  loadTelemetry();
+  loadAudit();
+}
+
+function renderNarrative(data) {
+  const el = document.getElementById('narrativePanel');
+  if (data.abstention) {
+    const a = data.abstention;
+    el.innerHTML = `
+      <div class="badge abstain">${a.mode}</div>
+      <div class="headline" style="margin-top:8px;">Abstained — evidence insufficient/contradictory</div>
+      <div class="subline">${a.reliable_findings}</div>
+      <div class="why-item"><b>Blocker:</b> ${a.blocker}</div>
+      <div class="why-item"><b>Why it matters:</b> ${a.why_it_matters}</div>
+      <div class="why-item"><b>Resolution:</b> ${a.resolution_path} <span class="muted">(owner: ${a.eta_or_owner})</span></div>
+      <div class="why-item"><b>What you can still do:</b> ${a.what_you_can_still_do}</div>
+      ${a.clarifying_question ? `<div class="why-item"><b>Clarify:</b> ${a.clarifying_question}</div>` : ''}
+    `;
+    return;
+  }
+  const n = data.narrative;
+  el.innerHTML = `
+    <div class="headline">${n.headline}</div>
+    <div class="subline">${n.what_changed} <span class="pill">tier: ${n.tier}</span></div>
+    ${n.why.map(w => `<div class="why-item">${linkifyEvidence(w.text)}</div>`).join('')}
+    <div class="subline" style="margin-top:10px;"><b>What we don't know:</b> ${n.what_we_dont_know}</div>
+    <div class="subline">${n.confidence_statement}</div>
+  `;
+}
+
+function renderConfidence(c, flags) {
+  const el = document.getElementById('confidencePanel');
+  if (!c) { el.innerHTML = '<span class="muted">n/a</span>'; return; }
+  el.innerHTML = `
+    <div style="margin-bottom:10px;"><span class="badge ${c.band}">${c.band.toUpperCase()}</span> <span class="muted">composite ${c.composite}</span></div>
+    <div class="kv"><span>Data</span><b>${c.data}</b></div>
+    <div class="kv"><span>Method</span><b>${c.method}</b></div>
+    <div class="kv"><span>Coverage</span><b>${c.coverage}</b></div>
+    <div class="kv"><span>Consistency</span><b>${c.consistency}</b></div>
+    <div class="kv"><span>History</span><b>${c.history}</b></div>
+    ${flags && flags.length ? `<div style="margin-top:8px; color:var(--warn); font-size:12px;">⚠ ${flags.join(', ')}</div>` : ''}
+  `;
+}
+
+function renderActions(actions, abstention) {
+  const el = document.getElementById('actionsPanel');
+  if (abstention) { el.innerHTML = '<span class="muted">No actions composed — analysis abstained.</span>'; return; }
+  let html = '';
+  actions.actions.forEach(a => {
+    html += `<div class="action-card">
+      <b>${a.action}</b><br/>
+      <span class="muted">Expected impact:</span> ${a.expected_impact.point}${a.expected_impact.unit.includes('pct') ? '%' : ''} (CI ${a.expected_impact.ci[0]}–${a.expected_impact.ci[1]}) ·
+      <span class="muted">owner:</span> ${a.owner} · <span class="muted">lead time:</span> ${a.lead_time_days}d · <span class="muted">confidence:</span> ${a.confidence}
+      <div style="margin-top:4px;">
+        driver: <span class="pill">${a.driver}</span>
+        <span class="thumb" onclick="giveFeedback('${a.driver}','accept')">👍 accept</span>
+        <span class="thumb" onclick="giveFeedback('${a.driver}','reject')">👎 reject</span>
+      </div>
+    </div>`;
+  });
+  actions.escalations.forEach(e => {
+    html += `<div class="escalation">Escalated to <b>${e.to_role}</b>: ${e.reason}</div>`;
+  });
+  el.innerHTML = html || '<span class="muted">Nothing material for this persona.</span>';
+}
+
+function renderFirewall(fw) {
+  const el = document.getElementById('firewallPanel');
+  if (!fw) { el.innerHTML = '<span class="muted">n/a for abstention narratives.</span>'; return; }
+  el.innerHTML = `<span class="${fw.passed ? 'fw-pass' : 'fw-fail'}">${fw.passed ? '✓ PASSED' : '✗ FAILED'}</span>
+    — orphan numerals: ${fw.orphan_numerals.length}, causal overreach: ${fw.causal_overreach.length}`;
+}
+
+function renderEntitlement(scope) {
+  const el = document.getElementById('entitlementPanel');
+  if (!scope) { el.innerHTML = '<span class="muted">n/a</span>'; return; }
+  el.innerHTML = `
+    <div class="kv"><span>Row policy</span><b style="font-size:11px;">${scope.applied_row_policy}</b></div>
+    <div class="kv"><span>Excluded regions</span><b>${scope.excluded_regions.join(', ') || 'none'}</b></div>
+    <div class="kv"><span>Masked columns</span><b>${scope.masked_columns.join(', ') || 'none'}</b></div>
+  `;
+}
+
+function showEvidence(id) {
+  const fact = state.bundle.facts.find(f => f.evidence_id === id);
+  const el = document.getElementById('evidenceContent');
+  if (!fact) { el.innerHTML = '<i>Not visible at your entitlement scope.</i>'; }
+  else {
+    el.innerHTML = `
+      <h3 style="margin-top:0;">${id}</h3>
+      <div class="kv"><span>Label</span><b>${fact.label}</b></div>
+      <div class="kv"><span>Value</span><b>${fact.value} ${fact.unit}</b></div>
+      <div class="kv"><span>Method</span><b>${fact.method}</b></div>
+      <div class="kv"><span>Quality tier</span><b>${fact.quality_tier}</b></div>
+      <div class="kv"><span>Source tables</span><b>${fact.source_tables.join(', ')}</b></div>
+      <div class="kv"><span>Contribution share</span><b>${fact.contribution_share !== null ? pct(fact.contribution_share) : '—'}</b></div>
+      <pre class="narr">${JSON.stringify(fact.method_params, null, 2)}</pre>
+    `;
+  }
+  document.getElementById('evidenceDrawer').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+}
+function closeDrawer() {
+  document.getElementById('evidenceDrawer').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+
+async function loadScorecard() {
+  const s = await jget('/api/scenario/1/scorecard');
+  const el = document.getElementById('scorecardPanel');
+  el.innerHTML = `
+    <div class="kv"><span>Driver recall@3</span><b>${s.driver_recall_at_3_label}</b></div>
+    <div class="kv"><span>Rank correlation (Spearman ρ)</span><b>${s.rank_correlation_spearman}</b></div>
+    <div class="kv"><span>Attribution MAE</span><b>${s.attribution_mae_pp}pp (target &lt;${s.attribution_mae_target_pp}pp)</b></div>
+    <div class="kv"><span>Residual error</span><b>${s.residual_error_pp}pp (target &lt;${s.residual_error_target_pp}pp)</b></div>
+    <table style="margin-top:10px;">
+      <tr><th>Driver</th><th>True %</th><th>Diagnosed %</th><th>True $</th><th>Diagnosed $</th></tr>
+      ${s.per_driver.map(d => `<tr><td>${d.driver_id}</td><td>${d.true_share_pct}%</td><td>${d.diagnosed_share_pct ?? '—'}%</td><td>${fmtMoney(d.true_dollar)}</td><td>${fmtMoney(d.diagnosed_dollar)}</td></tr>`).join('')}
+      <tr><td>noise/residual</td><td>${s.noise.true_share_pct}%</td><td>${s.noise.diagnosed_residual_share_pct}%</td><td colspan=2></td></tr>
+    </table>
+  `;
+}
+
+async function loadNaive() {
+  const n = await jget('/api/naive-vs-governed');
+  const el = document.getElementById('naivePanel');
+  el.innerHTML = `
+    <table>
+      <tr><th>Region</th><th>Margin %</th></tr>
+      ${Object.entries(n.by_region_pct).map(([k,v]) => `<tr><td>${k}</td><td>${v}%</td></tr>`).join('')}
+    </table>
+    <div class="kv" style="margin-top:8px;"><span>Naive average of region %</span><b style="color:var(--bad)">${n.naive_average_pct}%</b></div>
+    <div class="kv"><span>Governed recompute (summed components)</span><b style="color:var(--good)">${n.governed_recomputed_pct}%</b></div>
+    <div class="kv"><span>Gap</span><b>${n.delta_pp}pp</b></div>
+  `;
+}
+
+async function loadTelemetry() {
+  const t = await jget('/api/telemetry');
+  const el = document.getElementById('telemetryStrip');
+  el.innerHTML = `
+    <span><b>${(t.totals.deterministic_share*100).toFixed(0)}%</b> deterministic</span>
+    <span><b>${t.totals.total_model_calls}</b> model calls</span>
+    <span><b>$${t.totals.total_cost_usd.toFixed(3)}</b> cost</span>
+    <span><b>${t.totals.total_wall_ms}ms</b> total analyzer wall time</span>
+  `;
+}
+
+async function loadAudit() {
+  const a = await jget('/api/audit?limit=15');
+  const el = document.getElementById('auditPanel');
+  el.innerHTML = `<div class="muted" style="font-size:11.5px; margin-bottom:6px;">chain valid: ${a.chain_valid ? '✓' : '✗'}</div>` +
+    a.entries.slice().reverse().map(e => `
+      <div style="border-bottom:1px solid var(--border); padding:6px 0; font-size:11.5px;">
+        <span class="pill">${e.entry_hash}</span> ${e.event_id} · persona=${e.persona_id} · ${e.narrative_summary}
+      </div>
+    `).join('') || '<span class="muted">No entries yet.</span>';
+}
+
+async function runFirewallDemo() {
+  const r = await jget(`/api/firewall-demo?persona_id=${state.persona}`);
+  const el = document.getElementById('firewallDemoResult');
+  el.innerHTML = `
+    <div class="muted" style="font-size:11.5px;">Clean narrative:</div>
+    <pre class="narr">${r.clean_text}</pre>
+    <div><span class="${r.clean_verdict.passed?'fw-pass':'fw-fail'}">${r.clean_verdict.passed?'✓ PASSED':'✗ FAILED'}</span></div>
+    <div class="muted" style="font-size:11.5px; margin-top:10px;">Same narrative with an injected fabricated claim:</div>
+    <pre class="narr">...${r.corrupted_text.slice(-160)}</pre>
+    <div><span class="${r.corrupted_verdict.passed?'fw-pass':'fw-fail'}">${r.corrupted_verdict.passed?'✓ PASSED':'✗ CAUGHT — '+r.corrupted_verdict.orphan_numerals.join(', ')}</span></div>
+  `;
+}
+
+async function giveFeedback(driverId, polarity) {
+  await jpost('/api/feedback', {event_id: state.bundle.event_id, driver_id: driverId, polarity, analyst: state.persona});
+  await loadFeedbackPanel();
+  loadAudit();
+}
+
+function loadFeedbackPanel() {
+  const el = document.getElementById('feedbackPanel');
+  el.innerHTML = `<span class="muted">Use 👍/👎 on an action above to accept or reject its driver. Weights persist across runs and re-rank future driver lists.</span>`;
+}
+
+async function askQuestion() {
+  const text = document.getElementById('askInput').value;
+  if (!text) return;
+  const r = await jpost('/api/ask', {text});
+  const el = document.getElementById('askResult');
+  if (r.abstention) {
+    el.innerHTML = `<div class="badge abstain">A_clarify</div> <div style="margin-top:6px;">${r.abstention.clarifying_question}</div>`;
+  } else if (r.resolved_kpi) {
+    el.innerHTML = `Resolved to KPI: <span class="pill">${r.resolved_kpi}</span>`;
+  } else {
+    el.innerHTML = `<span class="muted">${r.message}</span>`;
+  }
+}
+
+(async function init() {
+  renderTabs();
+  await loadPersonas();
+  await loadScenario();
+  await loadScorecard();
+  await loadNaive();
+  await loadFeedbackPanel();
+})();
+</script>
+</body>
+</html>

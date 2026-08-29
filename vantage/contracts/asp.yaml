@@ -1,0 +1,27 @@
+kpi_id: asp
+display_name: Average Selling Price
+definition_business: "Net revenue divided by units sold. Non-additive: always recomputed from components, never averaged across dimensions."
+formula: "net_revenue / units_sold"
+grain: {entity: order_line, time: day}
+calendar: gregorian
+additivity: non_additive
+hierarchy:
+  parent: net_revenue
+  children: []
+  decomposition: null
+dimensions: [region, channel, category, sku]
+registered_drivers:
+  - {id: promo_calendar,   type: controllable,   lever: promo_depth, lag_days: [0, 14]}
+  - {id: channel_mix,      type: controllable,   lever: channel_incentive, lag_days: [0, 30]}
+  - {id: competitor_price, type: uncontrollable, lever: null, lag_days: [7, 28]}
+materiality:
+  min_business_impact_usd: 2
+  min_surprise_z: 2.0
+  min_history_periods: 26
+lineage: [raw.orders]
+entitlements:
+  row_policy: "region_in(user.regions)"
+  column_masks: {}
+owner: vp_revenue_ops
+monitoring_default: {watch: [asp], window_days: 14}
+version: 1
