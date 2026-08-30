@@ -25,21 +25,15 @@ from typing import Optional
 
 import pandas as pd
 
-
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class CausalEstimate:
     treatment: str
     outcome: str
     method: str
-    ate_estimate: float          # estimated average treatment effect
+    ate_estimate: float
     ate_unit: str
-    ate_ci_lower: float          # 95% CI lower bound
-    ate_ci_upper: float          # 95% CI upper bound
+    ate_ci_lower: float
+    ate_ci_upper: float
     pre_period: str
     post_period: str
     n_treated: int
@@ -49,15 +43,8 @@ class CausalEstimate:
     limitations: list[str] = field(default_factory=list)
     upgrade_path: str = ""
 
-
-# ---------------------------------------------------------------------------
-# DiD implementation
-# ---------------------------------------------------------------------------
-
-
 def _safe_mean(vals: list[float]) -> float:
     return sum(vals) / len(vals) if vals else 0.0
-
 
 def _stderr_of_diff(a: list[float], b: list[float]) -> float:
     """Pooled standard error of the difference of two group means."""
@@ -69,7 +56,6 @@ def _stderr_of_diff(a: list[float], b: list[float]) -> float:
 
     se = math.sqrt(var(a) / max(len(a), 1) + var(b) / max(len(b), 1))
     return se
-
 
 def _did_estimate(
     df: pd.DataFrame,
@@ -89,7 +75,6 @@ def _did_estimate(
     ctrl_diff = _safe_mean(ctrl_post) - _safe_mean(ctrl_pre)
     ate = treat_diff - ctrl_diff
 
-    # 95% CI using propagated standard errors (conservative)
     se = math.sqrt(
         _stderr_of_diff(treat_post, treat_pre) ** 2 +
         _stderr_of_diff(ctrl_post, ctrl_pre) ** 2
@@ -102,12 +87,6 @@ def _did_estimate(
     n_control = len(set(df.loc[df[treatment_col] == 0].index.tolist()))
     return round(ate, 2), round(ci_lo, 2), round(ci_hi, 2), n_treated, n_control
 
-
-# ---------------------------------------------------------------------------
-# Public: Promo ATE estimator
-# ---------------------------------------------------------------------------
-
-
 def estimate_promo_ate(orders_df: pd.DataFrame) -> CausalEstimate:
     """Estimate the Average Treatment Effect of the AMER promo ending (week 29→30)
     on per-SKU weekly net_revenue using Difference-in-Differences.
@@ -118,7 +97,6 @@ def estimate_promo_ate(orders_df: pd.DataFrame) -> CausalEstimate:
 
     Pre period: week 29  |  Post period: week 30.
     """
-    # Build panel: weekly revenue per SKU
     panel = (
         orders_df[orders_df.region == "AMER"]
         .groupby(["sku", "product_family", "week_idx"])["net_revenue"]

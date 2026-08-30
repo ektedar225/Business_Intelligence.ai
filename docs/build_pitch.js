@@ -1,12 +1,11 @@
 const pptxgen = require("pptxgenjs");
 
-// Clean black and white color scheme (ChatGPT-like)
 const BLACK = "0d0d0d";
 const DARK_GRAY = "1a1a1a";
 const MED_GRAY = "404040";
 const LIGHT_GRAY = "9b9b9b";
 const WHITE = "ffffff";
-const ACCENT = "19c37d";  // Clean green accent
+const ACCENT = "19c37d";  
 const ACCENT_DIM = "e6f7f1";
 
 const FONT = "Inter";
@@ -28,7 +27,6 @@ function pageNum(slide, n) {
 
 const pres = newDeck();
 
-// ============ SLIDE 1: TITLE ============
 {
   const s = pres.addSlide();
   s.background = { color: BLACK };
@@ -58,7 +56,6 @@ const pres = newDeck();
   });
 }
 
-// ============ SLIDE 2: THE PROBLEM ============
 {
   const s = pres.addSlide();
   s.background = { color: WHITE };
@@ -115,7 +112,6 @@ const pres = newDeck();
   });
 }
 
-// ============ SLIDE 3: OUR SOLUTION ============
 {
   const s = pres.addSlide();
   s.background = { color: WHITE };
@@ -133,7 +129,7 @@ const pres = newDeck();
     x: 0.8, y: 1.9, w: 11.7, h: 0.5, fontSize: 13, color: MED_GRAY, fontFace: FONT,
   });
   
-  // Architecture flow
+  
   const boxes = [
     { label: "1. DETECT", desc: "Materiality detection\nwith seasonality-aware\nbaselines" },
     { label: "2. RECONCILE", desc: "Multi-source data\nreconciliation across\ndifferent grains" },
@@ -166,7 +162,7 @@ const pres = newDeck();
       x, y: y + 0.5, w: boxWidth, h: 0.7, fontSize: 9, color: MED_GRAY, fontFace: FONT, align: "center", valign: "top"
     });
     
-    // Arrow
+    
     if (idx < boxes.length - 1) {
       s.addShape("rightArrow", {
         x: x + boxWidth + 0.02, y: y + 0.55, w: 0.11, h: 0.2,
@@ -176,7 +172,7 @@ const pres = newDeck();
     }
   });
   
-  // Key differentiator
+  
   s.addShape("roundRect", {
     x: 0.8, y: 4.5, w: 11.7, h: 0.85, rectRadius: 0.08,
     fill: { color: ACCENT_DIM },
@@ -187,7 +183,7 @@ const pres = newDeck();
     x: 1.2, y: 4.75, w: 11, h: 0.4, fontSize: 13, bold: true, color: BLACK, fontFace: FONT,
   });
   
-  // Bottom stats
+  
   const stats = [
     { value: "100%", label: "Deterministic\nComputation" },
     { value: "0", label: "LLM Calls\nfor Numbers" },
@@ -206,7 +202,6 @@ const pres = newDeck();
   });
 }
 
-// ============ SLIDE 4: HOW IT WORKS ============
 {
   const s = pres.addSlide();
   s.background = { color: WHITE };
@@ -251,7 +246,6 @@ const pres = newDeck();
   });
 }
 
-// ============ SLIDE 5: PROBLEM STATEMENT ALIGNMENT ============
 {
   const s = pres.addSlide();
   s.background = { color: WHITE };
@@ -296,7 +290,6 @@ const pres = newDeck();
   });
 }
 
-// ============ SLIDE 6: PROTOTYPE SCENARIOS ============
 {
   const s = pres.addSlide();
   s.background = { color: WHITE };
@@ -377,7 +370,6 @@ const pres = newDeck();
   });
 }
 
-// ============ SLIDE 7: TECHNOLOGY STACK ============
 {
   const s = pres.addSlide();
   s.background = { color: WHITE };
@@ -437,7 +429,7 @@ const pres = newDeck();
     yPos += 0.75;
   });
   
-  // Separator
+  
   s.addShape("line", {
     x: 0.8, y: yPos + 0.2, w: 11.7, h: 0, line: { color: MED_GRAY, width: 1, dashType: "dash" }
   });
@@ -455,7 +447,6 @@ const pres = newDeck();
   });
 }
 
-// ============ SLIDE 8: BUSINESS VALUE ============
 {
   const s = pres.addSlide();
   s.background = { color: WHITE };
@@ -515,7 +506,7 @@ const pres = newDeck();
     });
   });
   
-  // Enterprise scalability
+  
   s.addShape("roundRect", {
     x: 0.8, y: 5.8, w: 11.7, h: 0.9, rectRadius: 0.08,
     fill: { color: ACCENT_DIM },
@@ -531,7 +522,6 @@ const pres = newDeck();
   });
 }
 
-// ============ SLIDE 9: NEXT STEPS ============
 {
   const s = pres.addSlide();
   s.background = { color: BLACK };

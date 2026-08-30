@@ -44,7 +44,6 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 _bundle_cache: dict[str, tuple[EvidenceBundle, object]] = {}
 _telemetry_history: dict[str, dict] = {}
 
-
 def _get_scenario_raw(scenario_id: str):
     if scenario_id in _bundle_cache:
         return _bundle_cache[scenario_id]
@@ -61,7 +60,6 @@ def _get_scenario_raw(scenario_id: str):
     _bundle_cache[scenario_id] = result
     return result
 
-
 def _scope_bundle(bundle: EvidenceBundle, persona_id: str) -> EvidenceBundle:
     personas = get_persona_registry()
     persona = personas.get(persona_id)
@@ -73,22 +71,18 @@ def _scope_bundle(bundle: EvidenceBundle, persona_id: str) -> EvidenceBundle:
         row_policy=contract.entitlements.row_policy,
     )
 
-
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
-
 
 @app.get("/api/contracts")
 def contracts():
     reg = get_registry()
     return [c.model_dump() for c in reg.contracts.values()]
 
-
 @app.get("/api/personas")
 def personas():
     return [p.model_dump() for p in get_persona_registry().all()]
-
 
 @app.get("/api/scenario/{scenario_id}")
 def scenario(scenario_id: str, persona_id: str = "cfo"):
@@ -163,9 +157,8 @@ def scenario(scenario_id: str, persona_id: str = "cfo"):
         actions_taken=[],
     )
 
-    # Evaluate proactive alerts for this bundle
     alerts_triggered = evaluate_alerts(bundle)
-    deliver_alerts(alerts_triggered)  # logs to console; ready for real transport
+    deliver_alerts(alerts_triggered)
 
     return {
         "bundle": scoped.model_dump(),
@@ -178,18 +171,15 @@ def scenario(scenario_id: str, persona_id: str = "cfo"):
         "api_wall_ms": wall_ms,
     }
 
-
 @app.get("/api/scenario/1/scorecard")
 def scorecard():
     bundle, _ = _get_scenario_raw("1")
     return recovery_scorecard(bundle)
 
-
 @app.get("/api/naive-vs-governed")
 def naive_vs_governed():
     src = load_sources()
     return naive_vs_governed_margin(src["orders"], src["supply"], src["dim_sku"])
-
 
 @app.get("/api/firewall-demo")
 def firewall_demo(persona_id: str = "cfo"):
@@ -207,14 +197,12 @@ def firewall_demo(persona_id: str = "cfo"):
         "corrupted_verdict": corrupted_verdict.__dict__,
     }
 
-
 class FeedbackIn(BaseModel):
     event_id: str
     driver_id: str
     polarity: str
     analyst: str = "demo_analyst"
     comment: str = ""
-
 
 @app.post("/api/feedback")
 def submit_feedback(body: FeedbackIn):
@@ -231,15 +219,12 @@ def submit_feedback(body: FeedbackIn):
     )
     return {"structured": structured, "weights": feedback_mod.read_weights()}
 
-
 @app.get("/api/audit")
 def get_audit(limit: int = 50):
     return {"entries": audit.read_ledger(limit), "chain_valid": audit.verify_chain()}
 
-
 class AskIn(BaseModel):
     text: str
-
 
 @app.post("/api/ask")
 def ask(body: AskIn):
@@ -249,7 +234,6 @@ def ask(body: AskIn):
     if kpi_id is None:
         return {"resolved_kpi": None, "abstention": None, "message": "No registered KPI matched that question."}
     return {"resolved_kpi": kpi_id, "abstention": None}
-
 
 @app.get("/api/telemetry")
 def telemetry():
@@ -308,15 +292,12 @@ def telemetry():
         },
     }
 
-
-
 @app.get("/api/feedback/weights")
 def feedback_weights(limit: int = 20):
     """Return current Beta-Bernoulli driver weights and the last N feedback entries."""
     weights = feedback_mod.read_weights()
     log = feedback_mod.read_feedback_log(limit)
     return {"weights": weights, "recent_log": log}
-
 
 @app.get("/api/alerts")
 def alerts_endpoint():
@@ -331,7 +312,6 @@ def alerts_endpoint():
         except Exception:
             pass
     return {"alerts": all_alerts, "count": len(all_alerts)}
-
 
 @app.get("/api/drift")
 def drift_endpoint():
@@ -363,7 +343,6 @@ def drift_endpoint():
         "driver_rank_drift": driver_drift.__dict__,
     }
 
-
 @app.get("/api/causal")
 def causal_endpoint():
     """Run DiD causal inference to estimate the Average Treatment Effect of the
@@ -373,7 +352,5 @@ def causal_endpoint():
     estimate = estimate_promo_ate(orders)
     return estimate.__dict__
 
-
-# Mount static LAST — must come after all /api/* routes or StaticFiles swallows them.
 static_dir = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

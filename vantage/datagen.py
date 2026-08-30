@@ -22,7 +22,6 @@ CHANNELS = ["direct", "marketplace"]
 SEGMENTS = ["Consumer", "SMB", "Enterprise"]
 SEGMENT_SHARE = {"Consumer": 0.5, "SMB": 0.3, "Enterprise": 0.2}
 
-# sku_id -> (product_family, category, base_price)
 SKU_CATALOG = {
     "SKU-1001": ("family_a", "Electronics", 120.0),
     "SKU-4471": ("family_b", "Electronics", 95.0),
@@ -30,29 +29,25 @@ SKU_CATALOG = {
     "SKU-2001": ("family_c", "Home", 45.0),
     "SKU-3001": ("family_d", "Apparel", 30.0),
 }
-MARKETPLACE_PRICE_FACTOR = 0.88  # marketplace lists ~12% below direct
+MARKETPLACE_PRICE_FACTOR = 0.88
 
 REGION_DEMAND_WEIGHT = {"EMEA": 1.0, "AMER": 1.15, "APAC": 0.85}
-# APAC carries higher landed cost (import duties/logistics) despite being the
-# smallest-revenue region — this is what makes naively averaging margin% across
-# regions materially wrong (see reconciliation.naive_vs_governed_margin).
 REGION_COST_MULTIPLIER = {"EMEA": 1.0, "AMER": 0.95, "APAC": 1.55}
-DOW_SEASONALITY = {0: 1.0, 1: 1.0, 2: 1.02, 3: 1.02, 4: 1.05, 5: 0.85, 6: 0.75}  # Mon..Sun
+DOW_SEASONALITY = {0: 1.0, 1: 1.0, 2: 1.02, 3: 1.02, 4: 1.05, 5: 0.85, 6: 0.75}
 
 N_WEEKS = 30
-START_DATE = datetime(2026, 1, 5, tzinfo=timezone.utc)  # a Monday
-CURRENT_WEEK_IDX = N_WEEKS - 1        # week 30 (0-indexed 29) = "this week", the movement week
-PRIOR_WEEK_IDX = N_WEEKS - 2          # week 29 = comparison baseline for WoW
+START_DATE = datetime(2026, 1, 5, tzinfo=timezone.utc)
+CURRENT_WEEK_IDX = N_WEEKS - 1
+PRIOR_WEEK_IDX = N_WEEKS - 2
 
-# --- Scenario 1 injected drivers -------------------------------------------------
 PROMO_SKU, PROMO_REGION = "SKU-1001", "AMER"
-PROMO_WEEKS = {26, 27, 28, 29}        # 1-indexed weeks; promo runs then ends before week 30
-PROMO_DEPTH = 0.15                    # 15% discount during promo
-PROMO_LIFT = 0.74                     # +74% demand lift during promo
+PROMO_WEEKS = {26, 27, 28, 29}
+PROMO_DEPTH = 0.15
+PROMO_LIFT = 0.74
 
 STOCKOUT_SKU, STOCKOUT_REGION, STOCKOUT_WAREHOUSE = "SKU-4471", "EMEA", "DE"
-STOCKOUT_WEEK = 30                    # 1-indexed
-STOCKOUT_DAYS = {3, 4}                 # 1-indexed day-of-week within that week (Wed-Thu)
+STOCKOUT_WEEK = 30
+STOCKOUT_DAYS = {3, 4}
 
 CHANNEL_SPLIT_PRIOR = {"direct": 0.65, "marketplace": 0.35}
 CHANNEL_SPLIT_CURRENT = {"direct": 0.53, "marketplace": 0.47}
@@ -61,29 +56,24 @@ CHANNEL_SHIFT_WEEK = 30
 RETURNS_RATE = 0.02
 NOISE_STD = 0.03
 
-# --- Scenario 2: stale cost feed --------------------------------------------------
 GM_STALE_WAREHOUSE = "DE"
 GM_SLA_HOURS = 6.0
 GM_ACTUAL_STALENESS_HOURS = 26.0
 
-# --- Scenario 3: sparse-history product launch ------------------------------------
 NEW_FAMILY = "family_e"
-NEW_FAMILY_LAUNCH_WEEK = 28  # 1-indexed; only 3 weeks of history by week 30
-
+NEW_FAMILY_LAUNCH_WEEK = 28
 
 def _week_start(week_idx_0based: int) -> datetime:
     return START_DATE + timedelta(weeks=week_idx_0based)
 
-
 def _rng(seed: int) -> np.random.Generator:
     return np.random.default_rng(seed)
-
 
 def generate_orders(seed: int = 7) -> pd.DataFrame:
     rng = _rng(seed)
     rows = []
     for week0 in range(N_WEEKS):
-        week1 = week0 + 1  # 1-indexed
+        week1 = week0 + 1
         for day_offset in range(7):
             date = _week_start(week0) + timedelta(days=day_offset)
             dow = date.weekday()
@@ -143,7 +133,6 @@ def generate_orders(seed: int = 7) -> pd.DataFrame:
     df["net_revenue"] = df["gross_amount"] - df["discount_amount"] - df["returns_amount"]
     return df
 
-
 def generate_marketing(seed: int = 11) -> pd.DataFrame:
     rng = _rng(seed)
     rows = []
@@ -171,7 +160,6 @@ def generate_marketing(seed: int = 11) -> pd.DataFrame:
                         "promo_depth": PROMO_DEPTH if is_promo else 0.0,
                     }
                 )
-    # new-family launch campaign: only 3 weeks of spend history
     for week1 in range(NEW_FAMILY_LAUNCH_WEEK, N_WEEKS + 1):
         ws = _week_start(week1 - 1).date().isoformat()
         rows.append(
@@ -189,10 +177,8 @@ def generate_marketing(seed: int = 11) -> pd.DataFrame:
         )
     return pd.DataFrame(rows)
 
-
 def PROMO_SKU_FAMILY() -> str:
     return SKU_CATALOG[PROMO_SKU][0]
-
 
 def generate_supply(seed: int = 13, as_of: datetime | None = None) -> pd.DataFrame:
     """Hourly snapshot feed. S3 is deliberately the lowest-quality, latest-arriving
@@ -219,7 +205,7 @@ def generate_supply(seed: int = 13, as_of: datetime | None = None) -> pd.DataFra
                 on_hand = 0 if stockout else int(max(0, rng.normal(400, 40)))
                 cost = unit_costs[sku] * REGION_COST_MULTIPLIER[region] * float(rng.normal(1.0, 0.01))
                 if t > cutoff:
-                    continue  # simulates the feed not having arrived yet (stale as-of)
+                    continue
                 rows.append(
                     {
                         "timestamp": t.isoformat(),
@@ -234,13 +220,12 @@ def generate_supply(seed: int = 13, as_of: datetime | None = None) -> pd.DataFra
         t += timedelta(hours=1)
     return pd.DataFrame(rows)
 
-
 def generate_cac_new_family(seed: int = 17) -> pd.DataFrame:
     """A newly launched product line with only 3 weeks of history by the current week —
     too little for the seasonal baseline, forcing the sparse-history fallback
     (plan-vs-actual / peer-cohort, confidence capped Low)."""
     rng = _rng(seed)
-    new_customers_by_week = {28: 40, 29: 55, 30: 22}  # launch push tapering off sharply
+    new_customers_by_week = {28: 40, 29: 55, 30: 22}
     rows = []
     for week1 in range(NEW_FAMILY_LAUNCH_WEEK, N_WEEKS + 1):
         ws = _week_start(week1 - 1).date().isoformat()
@@ -259,7 +244,6 @@ def generate_cac_new_family(seed: int = 17) -> pd.DataFrame:
         )
     return pd.DataFrame(rows)
 
-
 def sku_dimension_table() -> pd.DataFrame:
     return pd.DataFrame(
         [
@@ -268,14 +252,12 @@ def sku_dimension_table() -> pd.DataFrame:
         ]
     )
 
-
 @dataclass
 class GroundTruthDriver:
     driver_id: str
     label: str
     true_dollar_impact: float
     true_share: float
-
 
 def compute_ground_truth(orders: pd.DataFrame) -> dict:
     """Directly measures, from the generated data, the dollar impact of each injected
@@ -286,7 +268,6 @@ def compute_ground_truth(orders: pd.DataFrame) -> dict:
     prior = orders[orders.week_idx == PRIOR_WEEK_IDX + 1]
     total_delta = cur.net_revenue.sum() - prior.net_revenue.sum()
 
-    # Promo-end: isolate the promo slice (sku, region)
     def slice_rev(df, sku=None, region=None):
         d = df
         if sku:
@@ -300,8 +281,6 @@ def compute_ground_truth(orders: pd.DataFrame) -> dict:
         prior, STOCKOUT_SKU, STOCKOUT_REGION
     )
 
-    # Channel mix: analytic effect of the split changing, holding total units fixed,
-    # excluding the promo/stockout slices already attributed above.
     excl = cur[~(((cur.sku == PROMO_SKU) & (cur.region == PROMO_REGION)) | ((cur.sku == STOCKOUT_SKU) & (cur.region == STOCKOUT_REGION)))]
     total_units_excl = excl.units.sum()
     avg_direct_price = SKU_CATALOG_avg_price("direct")
@@ -326,12 +305,10 @@ def compute_ground_truth(orders: pd.DataFrame) -> dict:
         "drivers": [asdict(d) for d in drivers],
     }
 
-
 def SKU_CATALOG_avg_price(channel: str) -> float:
     factor = MARKETPLACE_PRICE_FACTOR if channel == "marketplace" else 1.0
     prices = [p for _, _, p in SKU_CATALOG.values()]
     return float(np.mean(prices)) * factor
-
 
 def build_and_persist(seed: int = 7) -> dict:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -364,7 +341,6 @@ def build_and_persist(seed: int = 7) -> dict:
     payload = {"ground_truth": ground_truth, "meta": meta}
     (DATA_DIR / "ground_truth.json").write_text(json.dumps(payload, indent=2, default=str))
     return payload
-
 
 if __name__ == "__main__":
     result = build_and_persist()

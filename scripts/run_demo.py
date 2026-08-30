@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Headless sanity check: regenerates synthetic data, runs all three scenarios end to
 end, and prints the recovery scorecard + firewall verdicts + telemetry. Useful to
 confirm the engine works without starting the API/browser.
@@ -15,7 +14,6 @@ from vantage.pipeline import build_scenario1_bundle, build_scenario2_bundle, bui
 from vantage.scorecard import recovery_scorecard
 from vantage.narrative import render_narrative, verify_narrative
 from vantage.registries import get_persona_registry
-
 
 def main() -> None:
     print("Regenerating synthetic data with injected ground truth…")
@@ -46,7 +44,6 @@ def main() -> None:
 
     print("\nAll scenarios ran. Start the API + dashboard with:")
     print("  python3 -m uvicorn api.main:app --reload --port 8420")
-
 
 if __name__ == "__main__":
     main()

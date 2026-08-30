@@ -17,7 +17,6 @@ import pandas as pd
 
 DATA_DIR = Path(__file__).parent.parent / "data"
 
-
 @dataclass
 class FreshnessReport:
     source: str
@@ -28,7 +27,6 @@ class FreshnessReport:
     breached: bool
     quality_tier: str
 
-
 def load_sources() -> dict[str, pd.DataFrame]:
     return {
         "orders": pd.read_csv(DATA_DIR / "orders.csv", parse_dates=["date", "week_start"]),
@@ -38,7 +36,6 @@ def load_sources() -> dict[str, pd.DataFrame]:
         "cac_new_family": pd.read_csv(DATA_DIR / "cac_new_family.csv", parse_dates=["week_start"]),
     }
 
-
 def conform_calendar(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
     """Projects any date column onto the enterprise Gregorian, Monday-start ISO week
     calendar declared in the KPI contracts, so week-over-week comparisons never
@@ -46,7 +43,6 @@ def conform_calendar(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
     out = df.copy()
     out["iso_week_start"] = pd.to_datetime(out[date_col]).dt.to_period("W-SUN").apply(lambda p: p.start_time)
     return out
-
 
 def entity_resolve(orders: pd.DataFrame, dim_sku: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """Joins order lines to the conformed SKU dimension. Rows whose SKU has no mapping
@@ -61,7 +57,6 @@ def entity_resolve(orders: pd.DataFrame, dim_sku: pd.DataFrame) -> tuple[pd.Data
     }
     return merged, residual
 
-
 def freshness_report(source: str, timestamps: pd.Series, as_of: datetime, sla_hours: float) -> FreshnessReport:
     latest = pd.to_datetime(timestamps).max()
     if latest.tzinfo is None:
@@ -73,13 +68,11 @@ def freshness_report(source: str, timestamps: pd.Series, as_of: datetime, sla_ho
     tier = "gold" if not breached else ("silver" if lag_hours < sla_hours * 3 else "bronze")
     return FreshnessReport(source, latest.to_pydatetime(), as_of, lag_hours, sla_hours, breached, tier)
 
-
 def grain_safe_asp(df: pd.DataFrame) -> float:
     """Non-additive metric rule: ASP is always net_revenue.sum() / units.sum(),
     recomputed from summed components — never the mean of per-row unit prices."""
     units = df["units"].sum()
     return float(df["net_revenue"].sum() / units) if units else 0.0
-
 
 def naive_vs_governed_margin(orders: pd.DataFrame, supply: pd.DataFrame, dim_sku: pd.DataFrame) -> dict:
     """The L1 'demo moment': averaging a margin % across regions vs. recomputing it
@@ -93,10 +86,10 @@ def naive_vs_governed_margin(orders: pd.DataFrame, supply: pd.DataFrame, dim_sku
         lambda g: (g["net_revenue"].sum() - g["cogs"].sum()) / g["net_revenue"].sum(),
         include_groups=False,
     )
-    naive_overall = float(by_region.mean())  # WRONG: averaging a ratio across regions
+    naive_overall = float(by_region.mean())
     governed_overall = float(
         (merged["net_revenue"].sum() - merged["cogs"].sum()) / merged["net_revenue"].sum()
-    )  # RIGHT: recomputed from summed numerator/denominator
+    )
     return {
         "by_region_pct": {k: round(v * 100, 2) for k, v in by_region.items()},
         "naive_average_pct": round(naive_overall * 100, 2),

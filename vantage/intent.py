@@ -26,7 +26,7 @@ SYNONYMS: dict[str, list[str]] = {
     "average selling price": ["asp"],
     "cac": ["cac"],
     "acquisition cost": ["cac"],
-    "performance": ["net_revenue", "gross_margin_pct"],  # genuinely ambiguous business term
+    "performance": ["net_revenue", "gross_margin_pct"],
 }
 
 INTENT_SYSTEM_INSTRUCTION = """You are an intent understanding engine for the VANTAGE Business Intelligence platform.
@@ -45,7 +45,6 @@ Instructions:
 Output MUST be valid JSON in this exact structure:
 {"matched_kpi": string or null, "is_ambiguous": bool, "ambiguous_term": string or null, "candidates": [string]}"""
 
-
 def _resolve_rule_based(text: str) -> tuple[str | None, AbstentionResult | None]:
     lowered = text.lower()
     candidates: set[str] = set()
@@ -58,7 +57,6 @@ def _resolve_rule_based(text: str) -> tuple[str | None, AbstentionResult | None]
         matched_term = next(t for t, ids in SYNONYMS.items() if t in lowered and len(ids) > 1)
         return None, clarify_ambiguous_kpi(matched_term, sorted(candidates))
     return next(iter(candidates)), None
-
 
 def resolve_intent(text: str, use_llm: bool = True) -> tuple[str | None, AbstentionResult | None]:
     if not use_llm:
@@ -88,7 +86,6 @@ def resolve_intent(text: str, use_llm: bool = True) -> tuple[str | None, Abstent
         if matched and matched in REGISTERED_KPIS:
             return matched, None
         if matched is None and not parsed.get("is_ambiguous"):
-            # Also verify rule-based didn't catch a direct keyword
             rule_kpi, rule_abstain = _resolve_rule_based(text)
             return rule_kpi, rule_abstain
     except Exception:

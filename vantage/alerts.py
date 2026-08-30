@@ -18,22 +18,16 @@ from vantage.evidence import EvidenceBundle
 
 logger = logging.getLogger("vantage.alerts")
 
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class AlertRule:
     rule_id: str
-    kpi_id: str  # '*' = any KPI
+    kpi_id: str
     trigger: Literal["surprise_z", "wow_pct", "confidence_band"]
-    threshold: float  # for surprise_z / wow_pct: absolute value; for band: ignored
-    band_values: list[str] = field(default_factory=list)  # for confidence_band trigger
+    threshold: float
+    band_values: list[str] = field(default_factory=list)
     severity: Literal["info", "warning", "critical"] = "warning"
-    target_personas: list[str] = field(default_factory=list)  # [] = all personas
+    target_personas: list[str] = field(default_factory=list)
     channels: list[str] = field(default_factory=lambda: ["dashboard"])
-
 
 @dataclass
 class Alert:
@@ -47,11 +41,6 @@ class Alert:
     target_personas: list[str]
     channels: list[str]
     fired_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-
-# ---------------------------------------------------------------------------
-# Default alert rule library
-# ---------------------------------------------------------------------------
 
 DEFAULT_RULES: list[AlertRule] = [
     AlertRule(
@@ -67,9 +56,9 @@ DEFAULT_RULES: list[AlertRule] = [
         rule_id="large-wow-move",
         kpi_id="*",
         trigger="wow_pct",
-        threshold=0.05,  # 5% WoW
+        threshold=0.05,
         severity="warning",
-        target_personas=[],  # all personas
+        target_personas=[],
         channels=["dashboard"],
     ),
     AlertRule(
@@ -86,18 +75,12 @@ DEFAULT_RULES: list[AlertRule] = [
         rule_id="net-revenue-critical-drop",
         kpi_id="net_revenue",
         trigger="wow_pct",
-        threshold=0.08,  # > 8% drop triggers critical
+        threshold=0.08,
         severity="critical",
         target_personas=["cfo"],
         channels=["email", "dashboard"],
     ),
 ]
-
-
-# ---------------------------------------------------------------------------
-# Evaluation engine
-# ---------------------------------------------------------------------------
-
 
 def evaluate_alerts(
     bundle: EvidenceBundle,
@@ -110,7 +93,6 @@ def evaluate_alerts(
     confidence_band = bundle.confidence.band if bundle.confidence else "unknown"
 
     for rule in rules:
-        # KPI filter
         if rule.kpi_id != "*" and rule.kpi_id != bundle.kpi_id:
             continue
 
@@ -158,12 +140,6 @@ def evaluate_alerts(
 
     return alerts
 
-
-# ---------------------------------------------------------------------------
-# Delivery stub
-# ---------------------------------------------------------------------------
-
-
 def deliver_alerts(alerts: list[Alert]) -> list[dict]:
     """Deliver each alert to its target channels. Currently a structured log stub —
     replace the per-channel block with real transport clients (SendGrid, Slack SDK,
@@ -172,7 +148,6 @@ def deliver_alerts(alerts: list[Alert]) -> list[dict]:
     delivery_log: list[dict] = []
     for alert in alerts:
         for channel in alert.channels:
-            # ── transport stub ──────────────────────────────────────────────
             if channel == "email":
                 logger.info(
                     "[ALERT STUB] EMAIL → %s | %s | %s",
@@ -186,12 +161,11 @@ def deliver_alerts(alerts: list[Alert]) -> list[dict]:
                     alert.headline,
                     alert.detail,
                 )
-            else:  # dashboard / default
+            else:
                 logger.info(
                     "[ALERT STUB] DASHBOARD → %s",
                     alert.headline,
                 )
-            # ────────────────────────────────────────────────────────────────
             delivery_log.append({
                 "channel": channel,
                 "severity": alert.severity,

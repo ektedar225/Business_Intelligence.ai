@@ -28,7 +28,6 @@ CANDIDATE_PRO_MODELS = [
     "gemini-2.5-pro",
 ]
 
-
 @dataclass
 class LLMResponse:
     text: str
@@ -38,7 +37,6 @@ class LLMResponse:
     cost_usd: float = 0.0
     latency_ms: float = 0.0
     error: Optional[str] = None
-
 
 def get_api_key() -> Optional[str]:
     key = os.environ.get("GEMINI_API_KEY")
@@ -52,7 +50,6 @@ def get_api_key() -> Optional[str]:
                 return line.split("=", 1)[1].strip()
     return None
 
-
 def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     if "pro" in model:
         input_rate = 1.25 / 1_000_000
@@ -60,11 +57,10 @@ def _calc_cost(model: str, input_tokens: int, output_tokens: int) -> float:
     elif "flash-lite" in model:
         input_rate = 0.0375 / 1_000_000
         output_rate = 0.15 / 1_000_000
-    else:  # flash default
+    else:
         input_rate = 0.075 / 1_000_000
         output_rate = 0.30 / 1_000_000
     return round(input_tokens * input_rate + output_tokens * output_rate, 6)
-
 
 def call_gemini(
     prompt: str,

@@ -25,10 +25,8 @@ from vantage.evidence import EvidenceBundle, EvidenceFact, MovementFact, Telemet
 from vantage.materiality import detect_movement, hierarchy_collapse
 from vantage.reconciliation import entity_resolve, freshness_report, load_sources
 
-
 def _timed(analyzers_run: list[str], name: str):
     analyzers_run.append(name)
-
 
 def build_scenario1_bundle(seed_note: str = "scenario1") -> tuple[EvidenceBundle, dict]:
     t0 = time.perf_counter()
@@ -241,14 +239,12 @@ def build_scenario1_bundle(seed_note: str = "scenario1") -> tuple[EvidenceBundle
     }
     return bundle, debug
 
-
 def _meta_as_of() -> str:
     import json
     from pathlib import Path
 
     meta = json.loads((Path(__file__).parent.parent / "data" / "ground_truth.json").read_text())["meta"]
     return meta["as_of"]
-
 
 def _governed_margin_series(orders: pd.DataFrame, supply: pd.DataFrame) -> pd.Series:
     """Grain-safe: margin % recomputed per week from summed revenue and summed COGS,
@@ -266,7 +262,6 @@ def _governed_margin_series(orders: pd.DataFrame, supply: pd.DataFrame) -> pd.Se
         lambda g: (g["net_revenue"].sum() - g["cogs"].sum()) / g["net_revenue"].sum(), include_groups=False
     )
     return weekly
-
 
 def build_scenario2_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
     """Gross Margin % movement where the S3 cost feed has breached its freshness SLA —
@@ -381,7 +376,6 @@ def build_scenario2_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
     )
     return bundle, abstention, {"freshness": fresh}
 
-
 def build_scenario3_bundle() -> tuple[EvidenceBundle, dict]:
     """CAC for a newly launched product line with only 3 weeks of history — too little
     for the seasonal baseline. Falls back to plan-vs-actual, with confidence hard-capped
@@ -396,7 +390,7 @@ def build_scenario3_bundle() -> tuple[EvidenceBundle, dict]:
     history_periods = len(cac_df)
     current = cac_df.iloc[-1]
     prior = cac_df.iloc[-2]
-    plan_cac = 150.0  # stated assumption: launch-quarter plan target, not derived from data
+    plan_cac = 150.0
 
     delta_abs = float(current["cac"] - prior["cac"])
     delta_pct = delta_abs / prior["cac"]
@@ -473,7 +467,6 @@ def build_scenario3_bundle() -> tuple[EvidenceBundle, dict]:
     ).finalize()
     return bundle, {"vs_plan_pct": vs_plan_pct, "plan_cac": plan_cac}
 
-
 def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
     """ASP (Average Selling Price) movement in week 30 where two equally supported
     hypotheses compete:
@@ -498,7 +491,6 @@ def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
     prior_df = orders[orders.week_idx == prior_week]
     current_df = orders[orders.week_idx == current_week]
 
-    # --- Arithmetic bridge: isolate price effect vs volume effect ----------------
     bridge = price_volume_mix_bridge(prior_df, current_df, segment_dims=["region", "channel", "sku"])
     _timed(analyzers_run, "arithmetic_bridge")
 
@@ -506,13 +498,11 @@ def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
     mix_effect = bridge["mix_effect"]
     volume_effect = bridge["volume_effect"]
 
-    # Weekly ASP
     prior_asp = float(prior_df["net_revenue"].sum() / max(prior_df["units"].sum(), 1))
     current_asp = float(current_df["net_revenue"].sum() / max(current_df["units"].sum(), 1))
     wow_delta_asp = current_asp - prior_asp
     wow_pct_asp = wow_delta_asp / prior_asp if prior_asp else 0.0
 
-    # Movement fact for ASP
     movement = MovementFact(
         kpi_id="asp",
         period=f"week_{current_week}",
@@ -527,7 +517,6 @@ def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
         history_periods=current_week - 1,
     )
 
-    # --- Evidence for H1: price elasticity (own-price increase) ------------------
     h1_amount = round(price_effect, 2)
     fact_h1_price = EvidenceFact(
         evidence_id="E-01",
@@ -543,8 +532,6 @@ def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
         contribution_share=round(price_effect / wow_delta_asp, 4) if wow_delta_asp else 0.0,
     )
 
-    # --- Evidence for H2: competitor price move (market signal proxy) ------------
-    # Marketplace share increased → consistent with customers switching to cheaper alternatives.
     marketplace_prior = prior_df[prior_df.channel == "marketplace"]["net_revenue"].sum()
     marketplace_current = current_df[current_df.channel == "marketplace"]["net_revenue"].sum()
     total_prior = prior_df["net_revenue"].sum()
@@ -552,7 +539,6 @@ def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
     mkt_share_prior = float(marketplace_prior / total_prior) if total_prior else 0.0
     mkt_share_current = float(marketplace_current / total_current) if total_current else 0.0
     mkt_share_delta = mkt_share_current - mkt_share_prior
-    # Dollar impact proxy: mix shift effect from bridge
     h2_amount = round(mix_effect, 2)
 
     fact_h2_competitor = EvidenceFact(
@@ -575,14 +561,13 @@ def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
 
     facts = [fact_h1_price, fact_h2_competitor]
 
-    # Confidence: 2 contradictory methods → consistency score penalised
     confidence = compute_confidence(
         facts=facts,
         residual_share=0.07,
         history_periods=current_week - 1,
         min_history_periods=contract.materiality.min_history_periods if contract else 8,
         data_quality_flags=[],
-        contradictions=1,  # the two hypotheses contradict each other
+        contradictions=1,
     )
 
     wall_ms = (time.perf_counter() - t0) * 1000
@@ -606,7 +591,6 @@ def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
         ],
     ).finalize()
 
-    # --- Mode B abstention -------------------------------------------------------
     hypotheses = [
         {
             "id": "H1_price_elasticity",
@@ -632,7 +616,7 @@ def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
     abstention = competing_hypotheses(hypotheses)
 
     def _json_safe(v):
-        if hasattr(v, 'item'):  # numpy scalar (float64, bool_, int64, etc.)
+        if hasattr(v, 'item'):
             return v.item()
         if isinstance(v, (list, tuple)):
             return [_json_safe(i) for i in v]

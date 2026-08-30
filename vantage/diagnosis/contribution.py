@@ -19,7 +19,6 @@ from itertools import combinations
 
 import pandas as pd
 
-
 def beam_search_slices(
     prior_df: pd.DataFrame,
     current_df: pd.DataFrame,
@@ -40,7 +39,6 @@ def beam_search_slices(
         return piv
 
     results: list[dict] = []
-    # depth 1: score every single dimension independently, keep the best slices per dim
     frontier: list[tuple[list[str], pd.DataFrame]] = []
     for d in dims:
         piv = score([d])
@@ -58,8 +56,6 @@ def beam_search_slices(
             )
 
     if depth >= 2:
-        # depth 2: expand only the top single-dim slices with a second dimension (beam search,
-        # not full cross-product — this is what avoids combinatorial explosion)
         top_single = sorted(results, key=lambda r: abs(r["delta"]), reverse=True)[:top_k]
         for r in top_single:
             base_dim = r["dims"][0]
@@ -93,7 +89,6 @@ def beam_search_slices(
         deduped[key] = r
     ranked = sorted(deduped.values(), key=lambda r: abs(r["delta"]), reverse=True)
     return ranked[: top_k * 3]
-
 
 def mix_variance_effect(
     prior_df: pd.DataFrame,

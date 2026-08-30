@@ -25,8 +25,6 @@ from vantage.registries import Persona
 CAUSAL_VERBS = re.compile(r"\b(caused|drove|driven by|led to|resulted in|because of)\b", re.IGNORECASE)
 NUMERAL_RE = re.compile(r"-?\$?\d[\d,]*\.?\d*\s?%?")
 
-# Identifier patterns that legitimately contain digits but are not quantitative claims —
-# a SKU code or an [E-03] citation is not a "number" the firewall should be verifying.
 _IDENTIFIER_PATTERNS = [
     re.compile(r"\[E-\d+\]"),
     re.compile(r"\bSKU-\d+\b"),
@@ -36,12 +34,10 @@ _IDENTIFIER_PATTERNS = [
     re.compile(r"\bCMP-[\w-]+\b"),
 ]
 
-
 def _strip_identifiers(text: str) -> str:
     for pattern in _IDENTIFIER_PATTERNS:
         text = pattern.sub(" ", text)
     return text
-
 
 @dataclass
 class NarrativeResult:
@@ -55,14 +51,12 @@ class NarrativeResult:
     tier: str
     llm_meta: Optional[dict] = None
 
-
 @dataclass
 class FirewallVerdict:
     passed: bool
     orphan_numerals: list[str] = field(default_factory=list)
     causal_overreach: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
-
 
 def route_tier(bundle: EvidenceBundle) -> str:
     """Complexity-based tier decision — evaluated for every bundle."""
@@ -73,14 +67,11 @@ def route_tier(bundle: EvidenceBundle) -> str:
         return "T1_small_model"
     return "T0_template"
 
-
 def _fmt_usd(v: float) -> str:
     return f"${v:,.0f}" if abs(v) >= 1 else f"${v:.2f}"
 
-
 def _fmt_pct(v: float) -> str:
     return f"{v * 100:.1f}%"
-
 
 def _driver_verb(method: str) -> str:
     if method.startswith("causal_"):
@@ -90,7 +81,6 @@ def _driver_verb(method: str) -> str:
     if method.startswith("dimensional_contribution"):
         return "accounts for"
     return "is associated with"
-
 
 def render_template_narrative(
     bundle: EvidenceBundle,
@@ -159,7 +149,6 @@ def render_template_narrative(
         full_text=full_text,
         tier="T0_template",
     )
-
 
 def render_llm_narrative(
     bundle: EvidenceBundle,
@@ -279,7 +268,6 @@ STRICT NUMERIC & FACTUAL CONSTRAINTS (NUMERIC FIREWALL MONITORED):
     except Exception:
         return None
 
-
 def render_narrative(
     bundle: EvidenceBundle,
     persona: Persona,
@@ -295,7 +283,6 @@ def render_narrative(
             verdict = verify_narrative(llm_result, bundle)
             if verdict.passed:
                 return llm_result
-            # If firewall intercepts a hallucination or causal overreach, fall back to T0
             template_result.tier = "T0_template (firewall_fallback)"
             template_result.llm_meta = {
                 "firewall_fallback_reason": f"Orphans: {verdict.orphan_numerals}, Overreach: {verdict.causal_overreach}",
@@ -304,7 +291,6 @@ def render_narrative(
             return template_result
 
     return template_result
-
 
 def render_abstention_narrative(abstention: AbstentionResult) -> str:
     lines = [
@@ -323,7 +309,6 @@ def render_abstention_narrative(abstention: AbstentionResult) -> str:
         lines.append(f"- Hypothesis: {h}")
     return "\n".join(lines)
 
-
 def _extract_numerals(text: str) -> list[float]:
     out = []
     for raw in NUMERAL_RE.findall(text):
@@ -339,14 +324,13 @@ def _extract_numerals(text: str) -> list[float]:
         out.append(val)
     return out
 
-
 def _known_values(bundle: EvidenceBundle) -> list[float]:
     vals: list[float] = []
     m = bundle.movement
     for v in [m.actual, m.wow_delta_abs, m.wow_delta_pct, m.comparison_actual, m.baseline_forecast, m.impact_usd, m.surprise_z]:
         try:
             fv = float(v)
-            if fv == fv:  # not NaN
+            if fv == fv:
                 vals.extend([fv, abs(fv)])
         except (TypeError, ValueError):
             pass
@@ -365,11 +349,9 @@ def _known_values(bundle: EvidenceBundle) -> list[float]:
         ])
     return vals
 
-
 def _tolerance_for(k: float) -> float:
     floor = 0.006 if abs(k) <= 1 else 1.0
     return max(floor, abs(k) * 0.02)
-
 
 def numeric_firewall(text: str, bundle: EvidenceBundle) -> FirewallVerdict:
     known = _known_values(bundle)
@@ -379,9 +361,7 @@ def numeric_firewall(text: str, bundle: EvidenceBundle) -> FirewallVerdict:
             orphans.append(str(val))
     return FirewallVerdict(passed=len(orphans) == 0, orphan_numerals=orphans)
 
-
 _EVIDENCE_CITE_RE = re.compile(r"\[(E-\d+)\]")
-
 
 def causal_language_gate(text: str, bundle: EvidenceBundle) -> FirewallVerdict:
     violations = []
@@ -395,7 +375,6 @@ def causal_language_gate(text: str, bundle: EvidenceBundle) -> FirewallVerdict:
             violations.append(sentence.strip())
     return FirewallVerdict(passed=len(violations) == 0, causal_overreach=violations)
 
-
 def verify_narrative(narrative: NarrativeResult, bundle: EvidenceBundle) -> FirewallVerdict:
     numeric = numeric_firewall(narrative.full_text, bundle)
     causal = causal_language_gate(narrative.full_text, bundle)
@@ -404,7 +383,6 @@ def verify_narrative(narrative: NarrativeResult, bundle: EvidenceBundle) -> Fire
         orphan_numerals=numeric.orphan_numerals,
         causal_overreach=causal.causal_overreach,
     )
-
 
 def inject_violation_demo(narrative: NarrativeResult) -> NarrativeResult:
     corrupted = narrative.full_text + (

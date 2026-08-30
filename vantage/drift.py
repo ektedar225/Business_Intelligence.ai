@@ -17,12 +17,6 @@ import math
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 
-
-# ---------------------------------------------------------------------------
-# Data structures
-# ---------------------------------------------------------------------------
-
-
 @dataclass
 class DriftReport:
     metric: str
@@ -35,24 +29,17 @@ class DriftReport:
     recommendation: str
     component_scores: dict = field(default_factory=dict)
 
-
-# ---------------------------------------------------------------------------
-# PSI helpers
-# ---------------------------------------------------------------------------
-
 PSI_THRESHOLDS = [
     ("significant", 0.25),
     ("slight", 0.10),
     ("stable", 0.0),
 ]
 
-
 def _psi_alert(psi: float) -> str:
     for label, threshold in PSI_THRESHOLDS:
         if psi >= threshold:
             return label
     return "stable"
-
 
 def _psi_interpretation(psi: float, metric: str) -> str:
     level = _psi_alert(psi)
@@ -64,7 +51,6 @@ def _psi_interpretation(psi: float, metric: str) -> str:
         f"{metric} has drifted significantly (PSI={psi:.3f} > 0.25). "
         "Root cause investigation recommended before trusting seasonal baselines."
     )
-
 
 def _bucket_psi(vals_a: list[float], vals_b: list[float], n_buckets: int = 10) -> tuple[float, dict]:
     """Compute PSI between two distributions using equal-width buckets across combined range."""
@@ -85,7 +71,7 @@ def _bucket_psi(vals_a: list[float], vals_b: list[float], n_buckets: int = 10) -
             idx = min(int((v - mn) / width), n_buckets - 1)
             counts[idx] += 1
         total = sum(counts)
-        return [max(c / total, 1e-6) for c in counts]  # avoid log(0)
+        return [max(c / total, 1e-6) for c in counts]
 
     pcts_a = bin_counts(vals_a)
     pcts_b = bin_counts(vals_b)
@@ -93,12 +79,6 @@ def _bucket_psi(vals_a: list[float], vals_b: list[float], n_buckets: int = 10) -
     component = {f"bucket_{i}": round(psi_i, 4) for i, psi_i in
                  enumerate((b - a) * math.log(b / a) for a, b in zip(pcts_a, pcts_b))}
     return round(psi, 4), component
-
-
-# ---------------------------------------------------------------------------
-# Public: Data Drift
-# ---------------------------------------------------------------------------
-
 
 def detect_data_drift(
     series_a: list[float],
@@ -127,12 +107,6 @@ def detect_data_drift(
         component_scores=components,
     )
 
-
-# ---------------------------------------------------------------------------
-# Spearman helpers
-# ---------------------------------------------------------------------------
-
-
 def _spearman(ranks_a: list[int], ranks_b: list[int]) -> float:
     n = len(ranks_a)
     if n < 2:
@@ -140,16 +114,9 @@ def _spearman(ranks_a: list[int], ranks_b: list[int]) -> float:
     d_sq = sum((a - b) ** 2 for a, b in zip(ranks_a, ranks_b))
     return round(1 - (6 * d_sq) / (n * (n ** 2 - 1)), 4)
 
-
 def _weight_dict_to_ranks(weights: dict[str, float], all_keys: list[str]) -> list[int]:
     ordered = sorted(all_keys, key=lambda k: weights.get(k, 0.5), reverse=True)
     return [ordered.index(k) + 1 for k in all_keys]
-
-
-# ---------------------------------------------------------------------------
-# Public: Driver Rank Drift
-# ---------------------------------------------------------------------------
-
 
 def detect_driver_rank_drift(
     weight_snapshots: list[dict[str, float]],
@@ -177,7 +144,6 @@ def detect_driver_rank_drift(
     ranks_b = _weight_dict_to_ranks(snap_b, all_keys)
     rho = _spearman(ranks_a, ranks_b)
 
-    # Interpret: rho < 0.7 = significant rank drift
     if rho >= 0.9:
         level, interp = "stable", f"Driver ranking is stable (ρ={rho:.3f})."
     elif rho >= 0.7:

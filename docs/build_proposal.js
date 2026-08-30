@@ -131,7 +131,6 @@ function coverTitle() {
 const children = [];
 children.push(...coverTitle());
 
-// ---------- 1. Executive Summary ----------
 children.push(h1("1. Executive Summary"));
 children.push(p("Most enterprise “KPI storytelling” tools follow the same pattern: SQL pulls a number, an LLM writes a paragraph around it. That approach fails the central requirement of this brief — the LLM must not be the source of quantitative truth — because the moment a model is asked to narrate a number, it can also invent one, and nothing downstream can tell the difference."));
 children.push(p("VANTAGE is architected so that a hallucinated figure is structurally impossible to ship, not merely discouraged by a prompt. Every quantity in every delivered narrative is a citation into an immutable, content-hashed Evidence Bundle that is assembled entirely by deterministic code — arithmetic, statistics, and rule-based reconciliation — before any language model ever sees the data. A numeric firewall then re-derives every number in the generated text and rejects the response if any figure cannot be traced back to that bundle."));
@@ -152,7 +151,6 @@ children.push(table(
   [6300, 3700]
 ));
 
-// ---------- 2. Problem Framing ----------
 children.push(h1("2. Problem Framing"));
 children.push(h2("2.1 What actually breaks in enterprises today"));
 children.push(table(
@@ -181,7 +179,6 @@ children.push(table(
   [2200, 3200, 2600, 2000]
 ));
 
-// ---------- 3. Solution Architecture ----------
 children.push(new Paragraph({ children: [new PageBreak()] }));
 children.push(h1("3. Solution Architecture"));
 children.push(p("The system is a nine-layer pipeline. Layers L0–L5 are entirely deterministic — ingestion, reconciliation, materiality detection, and diagnosis never call a model. L6 is a rule-based confidence gate. Only L7, narrative synthesis, is generative, and even there the model receives nothing but the finished evidence bundle: no database connection, no raw tables, no ability to compute or fetch a figure of its own."));
@@ -295,7 +292,6 @@ children.push(p("Actions are drawn from a Lever Registry and filtered by the per
 children.push(h2("3.8 L8 — Delivery, audit, and the feedback loop"));
 children.push(p("Every delivered insight is written to an append-only, hash-chained audit ledger recording the persona, the bundle hash, the methods run, the model version (or “template”), and any feedback — chained so a retroactive edit to the ledger is detectable. A working feedback loop lets an analyst accept or reject a specific driver; rejections update a Bayesian posterior weight per driver that measurably demotes it in future rankings — demonstrated live by rejecting a driver four times and watching it drop below a lower-magnitude driver it previously outranked."));
 
-// ---------- 4. Security ----------
 children.push(new Paragraph({ children: [new PageBreak()] }));
 children.push(h1("4. Security, Entitlements & Auditability"));
 children.push(p("The governing design decision: entitlements are enforced on the Evidence Bundle, before the prompt is built — never by asking a model to redact. A prompt-level instruction to hide data is not a security control, because it can be argued with, forgotten under complexity, or bypassed by a sufficiently adversarial input; a row that was never placed in the bundle cannot be leaked by anything downstream."));
@@ -310,7 +306,6 @@ children.push(table(
   [1800, 3700, 3700]
 ));
 
-// ---------- 5. Prototype ----------
 children.push(new Paragraph({ children: [new PageBreak()] }));
 children.push(h1("5. The Working Prototype: What Was Built and Measured"));
 children.push(p("This section reports what the Round 2 prototype actually contains and what it actually measured — as distinct from the architecture proposed above, and honest about the gap between the two (§6)."));
@@ -382,7 +377,6 @@ children.push(p("CAC for a product family launched three weeks before the analys
 children.push(h2("5.5 LLM vs. non-LLM: the determinism accounting"));
 children.push(p("Per-insight telemetry recorded for every scenario in this build: 0 model calls, $0.00 cost, 100% of narratives produced by the deterministic template tier. This is a more conservative (and more honestly demonstrable) claim than the architecture's target split of roughly 92% deterministic / 8% model-assisted — in this prototype, the model-assisted tier is implemented as a routing decision (evaluated and logged for every bundle) but not exercised, so that the headline claim — the LLM contributes zero numbers — holds with zero exceptions rather than “almost always.”"));
 
-// ---------- 6. Honest gap accounting ----------
 children.push(new Paragraph({ children: [new PageBreak()] }));
 children.push(h1("6. Technology Stack, and an Honest Gap Accounting"));
 children.push(p("The brief asks teams to distinguish native, configured, custom-built, and externally integrated capabilities. The table below does that for what was actually built in Round 2, against what the full design proposes for a production deployment."));
@@ -408,7 +402,6 @@ children.push(bullet("A real model call for the T1/T2 narrative tiers — the ro
 children.push(bullet("Production-grade infrastructure (dbt lineage tests, Prefect scheduling, Postgres RLS, Langfuse tracing, a vector store for contextual retrieval) — each is architecturally accounted for above and is a swap-in at a named integration point, not a redesign."));
 children.push(p("Stating these gaps is itself part of the pitch: the brief explicitly rewards teams who show judgment about when to use which method and why, and a prototype that quietly overclaimed causal inference would undercut the exact discipline the numeric firewall exists to enforce."));
 
-// ---------- 7. Business case ----------
 children.push(new Paragraph({ children: [new PageBreak()] }));
 children.push(h1("7. Business Case & Impact"));
 children.push(p("All figures below are illustrative assumptions for a mid-size enterprise, stated explicitly per the brief's guidance, not derived from the synthetic prototype data."));
@@ -422,7 +415,6 @@ children.push(bullet("Decision latency from ~3 days to minutes: on a $500M reven
 children.push(bullet("Avoided wrong decisions from ungoverned or hallucinated figures — low frequency, high severity; treated as risk-adjusted upside, not a headline number."));
 children.push(callout("Honest framing: the provable, year-one component of ROI is time-to-insight and action-outcome tracking, both of which this prototype's audit ledger and feedback loop are built to measure directly — not the larger, harder-to-isolate avoided-risk figure.", ACCENT));
 
-// ---------- 8. Roadmap ----------
 children.push(h1("8. Phased Roadmap"));
 children.push(table(
   ["Phase", "Scope", "Exit criterion", "Status"],
@@ -437,7 +429,6 @@ children.push(table(
 ));
 children.push(p("The sequencing is deliberate and was followed in this build: the deterministic engine (Phases 0–1) was built and measured before any narrative or model-tier work (Phase 2), which is both the correct engineering order and the strongest available signal that quantitative correctness was never delegated to a language model."));
 
-// ---------- 9. Risks ----------
 children.push(h1("9. Key Risks & Mitigations"));
 children.push(table(
   ["Risk", "Mitigation"],
@@ -454,7 +445,6 @@ children.push(table(
   [3600, 6400]
 ));
 
-// ---------- 10. Appendix ----------
 children.push(new Paragraph({ children: [new PageBreak()] }));
 children.push(h1("10. Appendix: Selected Artifacts"));
 children.push(h2("10.1 Lever registry entry (used by the Action Composer, never invented at generation time)"));

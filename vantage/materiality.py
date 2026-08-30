@@ -14,7 +14,6 @@ import pandas as pd
 
 BASELINE_WINDOW_WEEKS = 8
 
-
 @dataclass
 class Movement:
     kpi_id: str
@@ -31,7 +30,6 @@ class Movement:
     wow_delta_abs: float
     wow_delta_pct: float
 
-
 def seasonal_naive_baseline(weekly_series: pd.Series, target_week_idx: int, window: int = BASELINE_WINDOW_WEEKS) -> tuple[float, float, int]:
     """Baseline = trailing-window mean (a forecast, not last period), so the engine
     doesn't fire on every expected seasonal swing. Returns (baseline, std, n_periods)."""
@@ -39,7 +37,6 @@ def seasonal_naive_baseline(weekly_series: pd.Series, target_week_idx: int, wind
     if len(history) == 0:
         return float("nan"), float("nan"), 0
     return float(history.mean()), float(history.std(ddof=0)) or 1e-6, int(len(history))
-
 
 def detect_movement(weekly_series: pd.Series, target_week_idx: int, kpi_id: str) -> Movement:
     """Two different comparisons serve two different jobs. `baseline` is a forecast
@@ -76,7 +73,6 @@ def detect_movement(weekly_series: pd.Series, target_week_idx: int, kpi_id: str)
         wow_delta_pct=wow_delta_pct,
     )
 
-
 def materiality_quadrant(movement: Movement, min_impact_usd: float, min_surprise_z: float) -> str:
     high_impact = movement.impact_usd >= min_impact_usd
     high_surprise = abs(movement.surprise_z) >= min_surprise_z
@@ -88,16 +84,15 @@ def materiality_quadrant(movement: Movement, min_impact_usd: float, min_surprise
         return "weekly_digest"
     return "suppress"
 
-
 def hierarchy_collapse(parent_movement: Movement, child_deltas: dict[str, float]) -> dict:
     """Traverses the KPI/dimension graph and collapses child movements that are
     already accounted for by the parent event into ONE alert, attaching the
     children as drivers rather than firing N additional independent alerts."""
-    parent_delta = parent_movement.wow_delta_abs  # children were computed WoW; normalize on the same basis
+    parent_delta = parent_movement.wow_delta_abs
     contributions = {k: (v / parent_delta if parent_delta else 0.0) for k, v in child_deltas.items()}
     ranked = sorted(contributions.items(), key=lambda kv: abs(kv[1]), reverse=True)
     top2_share = sum(abs(v) for _, v in ranked[:2]) if ranked else 0.0
-    collapsed = True  # a single parent-level event is always emitted; children become evidence, not separate alerts
+    collapsed = True
     would_be_independent_alerts = sum(
         1 for v in child_deltas.values() if abs(v) >= 0.3 * abs(parent_delta)
     )
