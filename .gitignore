@@ -6,6 +6,16 @@ node_modules/
 .venv/
 venv/
 *.egg-info/
-6a882073d90c9_accenture_innovation_challenge_round_2_detailed_problem_statements_final.pdf
+.claude/
 .env
+6a882073d90c9_accenture_innovation_challenge_round_2_detailed_problem_statements_final.pdf
 
+# Development logs, summaries and checklists (only README.md should be tracked)
+COMPLETE_UPDATE_LOG.md
+FINAL_DEMO_CHECKLIST.md
+FINAL_SUMMARY_FOR_USER.md
+PROBLEM_STATEMENT_CHECKLIST.md
+SUBMISSION_CHECKLIST.txt
+SUBMISSION_READY.md
+UI_UPDATE_SUMMARY.md
+VISUAL_UPGRADE_SUMMARY.md

@@ -1,0 +1,7 @@
+{
+  "channel_mix": {
+    "accepted": 2,
+    "rejected": 0,
+    "posterior_weight": 0.75
+  }
+}
