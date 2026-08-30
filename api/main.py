@@ -30,15 +30,19 @@ from vantage.narrative import (
     route_tier,
     verify_narrative,
 )
-from vantage.pipeline import build_scenario1_bundle, build_scenario2_bundle, build_scenario3_bundle
+from vantage.pipeline import build_scenario1_bundle, build_scenario2_bundle, build_scenario3_bundle, build_scenario4_bundle
 from vantage.reconciliation import load_sources, naive_vs_governed_margin
 from vantage.registries import get_lever_registry, get_persona_registry
 from vantage.scorecard import recovery_scorecard
+from vantage.alerts import evaluate_alerts, deliver_alerts
+from vantage.drift import detect_data_drift, detect_driver_rank_drift
+from vantage.causal import estimate_promo_ate
 
 app = FastAPI(title="VANTAGE — KPI Intelligence-to-Action Engine")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 _bundle_cache: dict[str, tuple[EvidenceBundle, object]] = {}
+_telemetry_history: dict[str, dict] = {}
 
 
 def _get_scenario_raw(scenario_id: str):
@@ -50,6 +54,8 @@ def _get_scenario_raw(scenario_id: str):
         result = build_scenario2_bundle()
     elif scenario_id == "3":
         result = build_scenario3_bundle()
+    elif scenario_id == "4":
+        result = build_scenario4_bundle()
     else:
         raise HTTPException(404, f"unknown scenario '{scenario_id}'")
     _bundle_cache[scenario_id] = result
@@ -95,8 +101,8 @@ def scenario(scenario_id: str, persona_id: str = "cfo"):
 
     raw = _get_scenario_raw(scenario_id)
     bundle: EvidenceBundle = raw[0]
-    abstention: Optional[AbstentionResult] = raw[1] if scenario_id == "2" else None
-    debug = raw[-1] if scenario_id != "2" else raw[2]
+    abstention: Optional[AbstentionResult] = raw[1] if scenario_id in ("2", "4") else None
+    debug = raw[-1] if scenario_id not in ("2",) else raw[2]
 
     scoped = _scope_bundle(bundle, persona_id)
 
@@ -117,7 +123,14 @@ def scenario(scenario_id: str, persona_id: str = "cfo"):
             "evidence_ids_used": narrative.evidence_ids_used,
             "full_text": narrative.full_text,
             "tier": narrative.tier,
+            "llm_meta": narrative.llm_meta,
         }
+        if narrative.llm_meta and scoped.telemetry:
+            scoped.telemetry.model_calls = 1
+            scoped.telemetry.input_tokens = narrative.llm_meta.get("input_tokens", 0)
+            scoped.telemetry.output_tokens = narrative.llm_meta.get("output_tokens", 0)
+            scoped.telemetry.cost_usd = narrative.llm_meta.get("cost_usd", 0.0)
+            scoped.telemetry.tier = narrative.tier
         plan = compose_actions(scoped, persona, levers)
         actions_payload = {
             "actions": [a.__dict__ for a in plan.actions],
@@ -126,16 +139,33 @@ def scenario(scenario_id: str, persona_id: str = "cfo"):
         firewall = {"passed": verdict.passed, "orphan_numerals": verdict.orphan_numerals, "causal_overreach": verdict.causal_overreach}
 
     wall_ms = round((time.perf_counter() - t0) * 1000, 1)
+    llm_meta = narrative_payload.get("llm_meta") or {}
+    _telemetry_history[scenario_id] = {
+        "scenario": scenario_id,
+        "kpi_id": scoped.kpi_id,
+        "analyzers_run": scoped.telemetry.analyzers_run if scoped.telemetry else [],
+        "wall_ms": wall_ms,
+        "model_calls": 1 if llm_meta.get("input_tokens") else 0,
+        "input_tokens": llm_meta.get("input_tokens", 0),
+        "output_tokens": llm_meta.get("output_tokens", 0),
+        "cost_usd": llm_meta.get("cost_usd", 0.0),
+        "tier": narrative_payload.get("tier", "T0_template"),
+        "model": llm_meta.get("model", "none"),
+    }
     audit.append_entry(
         event_id=scoped.event_id,
         bundle_hash=scoped.bundle_hash,
         persona_id=persona_id,
         methods_run=scoped.telemetry.analyzers_run if scoped.telemetry else [],
-        model_version="template_t0" if abstention is None else "abstention_template",
+        model_version=narrative_payload.get("tier", "template_t0") if abstention is None else "abstention_template",
         narrative_summary=narrative_payload.get("headline") or narrative_payload["full_text"][:120],
         row_policy=scoped.entitlement_scope.applied_row_policy if scoped.entitlement_scope else "none",
         actions_taken=[],
     )
+
+    # Evaluate proactive alerts for this bundle
+    alerts_triggered = evaluate_alerts(bundle)
+    deliver_alerts(alerts_triggered)  # logs to console; ready for real transport
 
     return {
         "bundle": scoped.model_dump(),
@@ -143,6 +173,7 @@ def scenario(scenario_id: str, persona_id: str = "cfo"):
         "narrative": narrative_payload,
         "actions": actions_payload,
         "firewall": firewall,
+        "alerts": [a.__dict__ for a in alerts_triggered],
         "debug": debug if isinstance(debug, dict) else None,
         "api_wall_ms": wall_ms,
     }
@@ -224,40 +255,125 @@ def ask(body: AskIn):
 def telemetry():
     summary = []
     total_ms = 0.0
+    total_calls = 0
+    total_in_tokens = 0
+    total_out_tokens = 0
+    total_cost = 0.0
     tier_counts: dict[str, int] = {}
-    for sid in ["1", "2", "3"]:
-        raw = _get_scenario_raw(sid)
-        bundle: EvidenceBundle = raw[0]
-        t = bundle.telemetry
-        if t:
-            total_ms += t.wall_ms
-        tier = route_tier(bundle)
-        tier_counts[tier] = tier_counts.get(tier, 0) + 1
-        summary.append(
-            {
+
+    for sid in ["1", "2", "3", "4"]:
+        if sid in _telemetry_history:
+            item = _telemetry_history[sid]
+        else:
+            raw = _get_scenario_raw(sid)
+            bundle: EvidenceBundle = raw[0]
+            t = bundle.telemetry
+            active_tier = route_tier(bundle)
+            item = {
                 "scenario": sid,
                 "kpi_id": bundle.kpi_id,
                 "analyzers_run": t.analyzers_run if t else [],
-                "wall_ms": t.wall_ms if t else None,
+                "wall_ms": t.wall_ms if t else 0.0,
                 "model_calls": 0,
                 "input_tokens": 0,
                 "output_tokens": 0,
                 "cost_usd": 0.0,
-                "would_route_tier": tier,
+                "tier": active_tier,
+                "model": "none",
             }
-        )
+
+        total_ms += item.get("wall_ms", 0.0)
+        total_calls += item.get("model_calls", 0)
+        total_in_tokens += item.get("input_tokens", 0)
+        total_out_tokens += item.get("output_tokens", 0)
+        total_cost += item.get("cost_usd", 0.0)
+        active_tier = item.get("tier", "T0_template")
+        tier_counts[active_tier] = tier_counts.get(active_tier, 0) + 1
+        summary.append(item)
+
+    n_scenarios = len(summary)
+    deterministic_share = round(1.0 - (total_calls / max(n_scenarios, 1)), 4)
+
     return {
         "per_scenario": summary,
         "totals": {
             "total_wall_ms": round(total_ms, 1),
-            "total_model_calls": 0,
-            "total_cost_usd": 0.0,
+            "total_model_calls": total_calls,
+            "total_input_tokens": total_in_tokens,
+            "total_output_tokens": total_out_tokens,
+            "total_cost_usd": round(total_cost, 6),
+            "deterministic_share": deterministic_share,
             "tier_distribution": tier_counts,
-            "deterministic_share": 1.0,
-            "note": "All narrative generation in this prototype runs on the T0 template tier (0 model calls, $0 cost). route_tier() shows what the complexity-based router would select if a model tier were exercised.",
+            "note": "VANTAGE uses a hybrid architecture: 100% deterministic numeric truth + Google Gemini LLM for persona narrative synthesis and conversational intent under strict numeric firewall verification.",
         },
     }
 
 
+
+@app.get("/api/feedback/weights")
+def feedback_weights(limit: int = 20):
+    """Return current Beta-Bernoulli driver weights and the last N feedback entries."""
+    weights = feedback_mod.read_weights()
+    log = feedback_mod.read_feedback_log(limit)
+    return {"weights": weights, "recent_log": log}
+
+
+@app.get("/api/alerts")
+def alerts_endpoint():
+    """Evaluate alert rules against all currently loaded scenario bundles."""
+    all_alerts = []
+    for sid in ["1", "2", "3", "4"]:
+        try:
+            raw = _get_scenario_raw(sid)
+            bundle = raw[0]
+            triggered = evaluate_alerts(bundle)
+            all_alerts.extend([a.__dict__ for a in triggered])
+        except Exception:
+            pass
+    return {"alerts": all_alerts, "count": len(all_alerts)}
+
+
+@app.get("/api/drift")
+def drift_endpoint():
+    """Run data drift (PSI) on Scenario 1 net revenue weekly series, and driver-rank
+    drift if feedback weights exist across multiple snapshots."""
+    src = load_sources()
+    orders = src["orders"]
+    weekly = orders.groupby("week_idx")["net_revenue"].sum().sort_index()
+    values = weekly.tolist()
+    mid = len(values) // 2
+    window_a = values[:mid]
+    window_b = values[mid:]
+    data_drift = detect_data_drift(
+        window_a, window_b,
+        metric="net_revenue_weekly",
+        label_a=f"weeks_1_to_{mid}",
+        label_b=f"weeks_{mid+1}_to_{len(values)}",
+    )
+
+    weights = feedback_mod.read_weights()
+    w_flat = {k: v.get("posterior_weight", 0.5) for k, v in weights.items()}
+    driver_drift = detect_driver_rank_drift(
+        [w_flat, w_flat] if w_flat else [{}, {}],
+        label_a="snapshot_baseline",
+        label_b="snapshot_current",
+    )
+    return {
+        "data_drift": data_drift.__dict__,
+        "driver_rank_drift": driver_drift.__dict__,
+    }
+
+
+@app.get("/api/causal")
+def causal_endpoint():
+    """Run DiD causal inference to estimate the Average Treatment Effect of the
+    AMER promo ending on SKU-level net revenue."""
+    src = load_sources()
+    orders = src["orders"]
+    estimate = estimate_promo_ate(orders)
+    return estimate.__dict__
+
+
+# Mount static LAST — must come after all /api/* routes or StaticFiles swallows them.
 static_dir = Path(__file__).parent / "static"
 app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

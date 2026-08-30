@@ -1,71 +1,73 @@
 # VANTAGE — KPI Intelligence-to-Action Engine
 
-VANTAGE is a working prototype built for Round 2 of the Accenture Innovation Challenge. The brief asked for a system that can look at a KPI movement, explain what actually caused it with evidence, say plainly when it doesn't know enough to explain it, and turn that explanation into an action a specific person is allowed to take. This repository is that system: a Python backend that does the detection, reconciliation, driver attribution, confidence scoring, and narrative generation, sitting behind a small FastAPI service with a browser dashboard on top.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg)](https://fastapi.tiangolo.com/)
+[![Google Gemini](https://img.shields.io/badge/AI-Google%20Gemini-4285F4.svg)](https://deepmind.google/technologies/gemini/)
+[![Tests](https://img.shields.io/badge/pytest-15%20passed-success.svg)](file:///tests)
 
-The supporting business proposal and pitch deck for the submission are also included in the repository root (`VANTAGE_Business_Proposal.pdf` / `.docx` and `VANTAGE_Pitch_Deck.pptx`).
+**VANTAGE** is an end-to-end KPI Intelligence-to-Action engine. Traditional Business Intelligence dashboards only display *what* happened; VANTAGE determines *why* it happened with mathematical evidence, knows when to abstain if evidence is incomplete, and translates root-cause diagnoses into concrete, authorized actions tailored to specific decision-makers.
 
-## Approach
+---
 
-The core design decision behind VANTAGE is that the language model, where one is used at all, is never allowed to touch a number. Every figure that ends up in a narrative — the size of a movement, the share attributed to a driver, a confidence score — is computed by deterministic, testable Python code first and handed to the text layer as an immutable, already-verified object. The narrative layer's only job is to phrase that object in a way that fits the reader, and a numeric firewall checks afterwards that every number in the rendered text actually traces back to the evidence bundle it was given. In this prototype the default narrative tier is template-based and makes zero model calls at all, which is the strongest version of that guarantee: it isn't that the model is well-behaved, it's that it's architecturally absent from the money path.
+## 🏛️ Core Design Philosophy
 
-The second design decision is to treat "we don't know" as a real output, not a failure state. When a source feed is stale, when history is too sparse to trust a pattern, or when a business term is genuinely ambiguous, the engine abstains explicitly and says what evidence is missing and what would resolve it, rather than guessing and sounding confident about it.
-
-Everything downstream of that — which KPIs exist, who is allowed to see what, which levers a persona can pull — is driven by plain YAML config (`vantage/contracts/`, `vantage/personas.yaml`, `vantage/levers.yaml`) rather than hardcoded logic, so extending the system to a new metric or a new role is a config change, not a code change.
-
-## Architecture
-
-The pipeline is organized as a layered ladder, with each layer implemented as a small, independently testable module under `vantage/`:
-
-- **L1 — Reconciliation** (`reconciliation.py`): projects heterogeneous sources (daily orders, weekly marketing, hourly supply snapshots) onto one calendar, resolves SKUs to a conformed product dimension, and watermarks every fact with the freshness of its slowest contributing source.
-- **L3 — Materiality** (`materiality.py`): detects which KPI movements are actually worth explaining, using a seasonality-aware baseline and two-axis materiality (statistical surprise and business impact) instead of a single fixed threshold. Also collapses a global movement and its regional children into one event instead of an alert storm.
-- **Diagnosis method ladder** (`vantage/diagnosis/`): three complementary attribution techniques, run cheapest and most-certain first —
-  - `arithmetic_bridge.py`: exact price/volume/mix decomposition (pure algebra, not inference).
-  - `contribution.py`: dimensional slice attribution via beam search over the dimension lattice, plus mix-variance effects.
-  - `event_join.py`: joins registered operational events (promo end, stockout) onto the movement window to find a business-event explanation.
-  - `residual.py`: whatever the ladder can't explain is stated explicitly as an unexplained residual instead of being folded silently into the last driver found.
-- **L5 — Evidence Bundle** (`evidence.py`): the contract between the deterministic pipeline and the narrative layer — an immutable, typed, content-hashed object. The narrative service receives only this bundle, with no database access, so it cannot fetch or compute a number on its own.
-- **L6 — Confidence & Abstention** (`confidence.py`): combines five named components into one banded composite score, and implements three distinct abstention behaviours (stale source, sparse history, ambiguous term) that each explain what's missing rather than just refusing.
-- **L7 — Narrative & Numeric Firewall** (`narrative.py`): renders the persona-specific narrative and verifies afterwards that every numeral in the text is traceable to the evidence bundle and that no unproven causal language slipped in.
-- **Action composition** (`actions.py`): actions are drawn from the lever registry, never invented by the narrative layer, and filtered by what the current persona is actually allowed to do; a material driver outside a persona's decision rights becomes an escalation instead of a suggested action they can't take.
-- **L8 — Feedback loop** (`feedback.py`): an analyst's accept/reject on a specific driver is persisted and folded into a per-driver acceptance weight via a Beta-Bernoulli posterior update, so rejecting a driver repeatedly measurably lowers its rank on the next run.
-- **Audit ledger** (`audit.py`): an append-only, hash-chained log of every delivered insight, so any result can be replayed from its bundle hash and any retroactive edit to the log is detectable.
-- **Orchestration** (`pipeline.py`): the only module that knows the order the analyzers run in for each of the three demo scenarios; every analyzer itself is a pure, stateless function.
-- **Scoring** (`scorecard.py`): because Scenario 1's data is generated with known, injected drivers (see `datagen.py`), this measures whether the engine actually recovers those drivers rather than just producing plausible-sounding text — driver recall, rank correlation, attribution error, and residual error are all computed against ground truth, not asserted.
-
-`api/main.py` is a thin FastAPI layer over this pipeline: it resolves intent, scopes the evidence bundle to the requesting persona's entitlements, and returns the narrative, actions, firewall verdict, and telemetry as JSON. `api/static/index.html` is the browser dashboard served from the same app.
-
-### Repository layout
+### 1. "The LLM Never Touches a Number"
+Language models, when unconstrained, hallucinate figures and invent spurious correlations. In VANTAGE:
+- **100% Deterministic Math**: All metric reconciliations, Price-Volume-Mix decompositions, lattice attributions, and confidence scores are calculated exclusively by deterministic Python algorithms.
+- **Immutable Evidence Bundle**: The computed facts are sealed into a content-hashed, immutable `EvidenceBundle`.
+- **Restricted AI Synthesis**: Google Gemini (or local template tiers) receives only the immutable bundle to synthesize persona-tailored prose. The LLM has zero direct access to databases or calculations.
+- **Numeric Firewall**: An automated verification gate scans the output text before delivery to guarantee that every single numeral is traceable to the bundle and that no unproven causal claims are made.
 
 ```
-vantage/            Core engine: reconciliation, materiality, diagnosis, confidence, narrative, actions, feedback, audit
-vantage/contracts/  YAML KPI contracts (definition, grain, driver DAG, materiality thresholds, entitlements)
-vantage/diagnosis/  The three-method attribution ladder plus residual accounting
-api/                FastAPI service and static dashboard
-data/                Synthetic source data and generated ground truth / audit ledger
-scripts/run_demo.py Headless end-to-end run of all three scenarios (no browser needed)
-tests/               Pytest suite covering the pipeline
-docs/                Node scripts that generate the business proposal and pitch deck documents
+┌─────────────────────────┐     ┌────────────────────────┐     ┌────────────────────────┐     ┌───────────────────────┐
+│ Raw Heterogeneous Data  │ ──► │  Deterministic Ladder  │ ──► │ Immutable Evidence     │ ──► │ Google Gemini LLM     │
+│ (Orders, S3, ERP, Logs) │     │ (Math, PVM, DiD, PSI)  │     │ Bundle (Content-Hashed)│     │ Persona Narrative Gen │
+└─────────────────────────┘     └────────────────────────┘     └────────────────────────┘     └───────────┬───────────┘
+                                                                                                          │
+                                                               ┌────────────────────────┐                 ▼
+                                                               │ Governed User Delivery │ ◄── ┌───────────────────────┐
+                                                               │ (Actions, UI, Alerts)  │     │ Numeric Firewall Gate │
+                                                               └────────────────────────┘     │ (Zero Hallucination)  │
+                                                                                              └───────────────────────┘
 ```
 
-## Dependencies
+### 2. First-Class Abstention ("We Don't Know")
+Rather than hallucinating answers when signals are weak, VANTAGE treats **"We Don't Know"** as a first-class governed output:
+- **Mode A (Stale Feed)**: Identifies delayed upstream data feeds and watermarks.
+- **Mode B (Sparse History / Competing Hypotheses)**: Flags insufficient statistical variance or unresolved cross-elasticity.
+- **Mode C (Ambiguous Terminology)**: Asks for clarification when business terms (e.g., "Margin" vs "Gross Margin %") are unclear.
 
-Backend (Python 3.10+):
+---
 
-- fastapi
-- uvicorn
-- pandas
-- numpy
-- pydantic
-- PyYAML
-- pytest (for the test suite)
+## ⚡ Architectural Layers
 
-All pinned in `requirements.txt`.
+VANTAGE is engineered as a layered pipeline (`vantage/`):
 
-Document generation (`docs/`) uses Node.js with `docx` and `pptxgenjs`, listed in `package.json`. This part is only needed if you want to regenerate the proposal or pitch deck; it isn't required to run the engine itself.
+- **L1 — Reconciliation & Freshness Watermarking** (`reconciliation.py`): Projects heterogeneous sources onto a unified calendar, resolves SKUs to conformed product dimensions, and calculates pipeline freshness watermarks.
+- **L3 — Seasonality-Aware Materiality** (`materiality.py`): Detects anomalous movements using statistical surprise ($z$-score against seasonal baselines) combined with absolute business materiality.
+- **Diagnosis Ladder** (`vantage/diagnosis/`):
+  - `arithmetic_bridge.py`: Exact algebraic Price-Volume-Mix (PVM) decomposition.
+  - `contribution.py`: Multi-dimensional slice attribution via beam search over dimension lattices.
+  - `event_join.py`: Operational event correlation (promotional end-dates, stockouts, supply delays).
+  - `residual.py`: Explicitly accounts for unexplained variance rather than forcing false closures.
+- **Causal Econometrics** (`causal.py`): **Difference-in-Differences (DiD)** regression estimating the true **Average Treatment Effect (ATE)** of business interventions.
+- **Drift Detection** (`drift.py`): **Population Stability Index (PSI)** calculation across weekly metric distributions and driver rank volatility.
+- **L5 — Evidence Bundle Contract** (`evidence.py`): Typed, serialized, content-hashed contract encapsulating all verified facts and telemetry.
+- **L6 — Composite Confidence & Abstention Engine** (`confidence.py`): Five-factor confidence scoring (freshness, history length, completeness, signal-to-noise, lattice coverage).
+- **L7 — Persona Adaptation & Numeric Firewall** (`narrative.py`): Persona-scoped narrative generation with word budgets, depth controls, and regex/token mathematical verification.
+- **Decision Levers & Action Routing** (`actions.py`): Filters concrete operational actions from a YAML lever registry against the user's role-based decision rights.
+- **L8 — Closed-Loop Feedback** (`feedback.py`): Beta-Bernoulli Bayesian posterior updates that learn from human analyst feedback (accept/reject) to dynamically adjust driver rankings.
+- **Cryptographic Audit Ledger** (`audit.py`): Append-only, SHA-256 hash-chained ledger recording every insight, evidence hash, model version, and user action.
+- **Proactive Multi-Channel Alerts** (`alerts.py`): Configurable rule evaluation and multi-channel delivery routing (Slack, Teams, Email).
+- **Conversational Intent Router** (`intent.py` & `llm.py`): Natural language parser powered by Google Gemini with fallback to deterministic pattern matching.
 
-## Running it
+---
 
-Clone the repository and set up a Python environment:
+## 🚀 Getting Started
+
+### 1. Environment Setup
+
+Clone the repository and install dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -73,36 +75,92 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Run the headless demo, which regenerates the synthetic data with injected ground truth and runs all three scenarios end to end, printing the narrative, the recovery scorecard, and the firewall verdict:
+### 2. Configure Environment Variables (Optional for LLM)
+
+Create a `.env` file in the root directory to enable Google Gemini-powered dynamic narratives:
+
+```bash
+GEMINI_API_KEY="your-google-gemini-api-key"
+```
+
+*(Note: If no API key is provided, VANTAGE automatically operates in its high-speed **T0 Deterministic Template Tier** with zero external dependencies).*
+
+### 3. Run the Headless Sanity Check
+
+Regenerates synthetic data with ground truth and executes all scenarios end-to-end:
 
 ```bash
 python3 scripts/run_demo.py
 ```
 
-Start the API and dashboard:
+### 4. Launch the Interactive Dashboard
 
 ```bash
 python3 -m uvicorn api.main:app --reload --port 8420
 ```
 
-Then open `http://127.0.0.1:8420` in a browser. A few endpoints worth trying directly:
+Open **`http://127.0.0.1:8420`** in your browser.
 
-- `GET /api/scenario/1?persona_id=cfo` — the multi-factor Net Revenue movement, fully explained
-- `GET /api/scenario/2?persona_id=cfo` — the stale-feed abstention scenario
-- `GET /api/scenario/3?persona_id=cfo` — the sparse-history CAC scenario
-- `GET /api/firewall-demo` — shows the numeric firewall catching a deliberately corrupted narrative
-- `GET /api/audit` — the hash-chained audit ledger with chain-validity check
+---
 
-Run the test suite:
+## 🖥️ Interactive Web Dashboard & Demo Scenarios
+
+The browser dashboard demonstrates the full power of VANTAGE across four distinct scenarios:
+
+1. **Scenario 1 · Multi-Factor Movement (Net Revenue)**: Decomposes a multi-driver revenue change into exact Price, Volume, Mix, and Stockout effects.
+2. **Scenario 2 · Explicit Abstention (Stale S3 Pipeline)**: Demonstrates responsible AI by abstaining when upstream data is delayed.
+3. **Scenario 3 · Sparse History (New Market CAC)**: Explains low confidence on metrics with short baselines.
+4. **Scenario 4 · Competing Hypotheses (Margin Compression)**: Explicitly surfaces competing drivers when variance cannot be uniquely resolved.
+
+### Interactive Features:
+- **Persona Switcher**: Toggle between **CFO** (90-word executive summary), **Regional Sales Director** (region-masked, operational focus), and **Data Analyst** (full statistical grain).
+- **Clickable Evidence Drawer**: Click chips like `[E-01]` or `[E-02]` to view immutable source facts.
+- **Live Firewall Demo**: Click *"Run live violation-injection demo"* to watch the Numeric Firewall intercept and block synthetic hallucinations in real time.
+- **Bayesian Feedback Loop**: Click 👍 / 👎 on drivers to watch posterior weights update dynamically.
+- **Causal DiD & Data Drift (PSI)**: Inspect econometric treatment effects and weekly population stability indices.
+- **Ask VANTAGE**: Natural language conversational entry point mapping questions directly to governed KPI contracts.
+
+---
+
+## 📡 API Reference
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Service health status. |
+| `GET` | `/api/contracts` | List all registered YAML KPI contracts. |
+| `GET` | `/api/personas` | List persona definitions, decision rights, and masking rules. |
+| `GET` | `/api/scenario/{id}?persona_id={p}` | Full diagnostic bundle, narrative, actions, and firewall verdict. |
+| `GET` | `/api/scenario/1/scorecard` | Measured driver recall, rank correlation, and attribution MAE. |
+| `GET` | `/api/causal` | Difference-in-Differences Average Treatment Effect (ATE). |
+| `GET` | `/api/drift` | Population Stability Index (PSI) and driver rank drift metrics. |
+| `GET` | `/api/alerts` | Proactively evaluated alert triggers across active metrics. |
+| `GET` | `/api/firewall-demo` | Live side-by-side demonstration of the Numeric Firewall. |
+| `POST`| `/api/feedback` | Submit analyst feedback to update Beta-Bernoulli weights. |
+| `GET` | `/api/feedback/weights` | Current posterior driver weights and recent feedback logs. |
+| `GET` | `/api/audit` | Append-only hash-chained audit ledger with SHA-256 chain verification. |
+| `POST`| `/api/ask` | Natural language intent resolution to governed KPIs. |
+| `GET` | `/api/telemetry` | End-to-end performance, wall-clock latency, and token cost metrics. |
+
+---
+
+## 🧪 Testing
+
+Run the full pytest suite:
 
 ```bash
 pytest tests/ -v
 ```
 
-To regenerate the business proposal or pitch deck from the `docs/` scripts:
+All 15 unit and integration tests validate the attribution ladder, causal DiD, PSI drift, Gemini LLM fallback, numeric firewall interception, persona masking, and Bayesian feedback updating.
+
+---
+
+## 📄 Proposal & Pitch Deck Generation
+
+Document generation scripts are available under `docs/`:
 
 ```bash
 npm install
-node docs/build_proposal.js
-node docs/build_pitch.js
+node docs/build_proposal.js   # Generates VANTAGE_Business_Proposal.docx
+node docs/build_pitch.js      # Generates VANTAGE_Pitch_Deck.pptx
 ```

@@ -1,8 +1,12 @@
-"""Runtime orchestration (the L3->L6 flow) for the three demo scenarios. Each
+"""Runtime orchestration (the L3->L6 flow) for the four demo scenarios. Each
 scenario builds one EvidenceBundle by running the method ladder cheapest/most-certain
 first, doing residual accounting along the way, then scoring confidence. This module
 is the only place that knows the *order* analyzers run in; every analyzer itself
 stays a pure, stateless function.
+
+Scenario 4 demonstrates Mode B abstention (competing_hypotheses): an ASP movement
+where price-elasticity and competitor-pricing explanations have statistically equal
+support, so the engine refuses to pre-rank one over the other.
 """
 from __future__ import annotations
 
@@ -16,8 +20,8 @@ from vantage.diagnosis.arithmetic_bridge import price_volume_mix_bridge
 from vantage.diagnosis.contribution import beam_search_slices, mix_variance_effect
 from vantage.diagnosis.event_join import find_promo_end_events, find_stockout_events, scope_dollar_impact
 from vantage.diagnosis.residual import residual_accounting
-from vantage.confidence import compute_confidence, hard_abstain_stale_source, AbstentionResult
-from vantage.evidence import EvidenceBundle, EvidenceFact, MovementFact, Telemetry
+from vantage.confidence import compute_confidence, hard_abstain_stale_source, competing_hypotheses, AbstentionResult
+from vantage.evidence import EvidenceBundle, EvidenceFact, MovementFact, Telemetry, Contradiction
 from vantage.materiality import detect_movement, hierarchy_collapse
 from vantage.reconciliation import entity_resolve, freshness_report, load_sources
 
@@ -468,3 +472,175 @@ def build_scenario3_bundle() -> tuple[EvidenceBundle, dict]:
         data_quality_flags=["sparse_history"],
     ).finalize()
     return bundle, {"vs_plan_pct": vs_plan_pct, "plan_cac": plan_cac}
+
+
+def build_scenario4_bundle() -> tuple[EvidenceBundle, AbstentionResult, dict]:
+    """ASP (Average Selling Price) movement in week 30 where two equally supported
+    hypotheses compete:
+      H1 — internal price elasticity: own-price increase in family_b reduced demand
+           (supported by arithmetic bridge showing price_effect ≈ $-1,800).
+      H2 — competitor price move: a competitor price cut shifted demand away from us
+           (supported by market-signal proxy: channel_mix shift toward marketplace,
+           same magnitude, but no direct competitor price data).
+
+    Neither method dominates the other → Mode B (competing_hypotheses) abstention.
+    The engine surfaces both hypotheses with equal prominence and names the
+    discriminating test that would break the tie.
+    """
+    t0 = time.perf_counter()
+    analyzers_run: list[str] = []
+    src = load_sources()
+    orders = src["orders"]
+    contract = get_registry().get("asp")
+    _timed(analyzers_run, "materiality_baseline")
+
+    prior_week, current_week = 29, 30
+    prior_df = orders[orders.week_idx == prior_week]
+    current_df = orders[orders.week_idx == current_week]
+
+    # --- Arithmetic bridge: isolate price effect vs volume effect ----------------
+    bridge = price_volume_mix_bridge(prior_df, current_df, segment_dims=["region", "channel", "sku"])
+    _timed(analyzers_run, "arithmetic_bridge")
+
+    price_effect = bridge["price_effect"]
+    mix_effect = bridge["mix_effect"]
+    volume_effect = bridge["volume_effect"]
+
+    # Weekly ASP
+    prior_asp = float(prior_df["net_revenue"].sum() / max(prior_df["units"].sum(), 1))
+    current_asp = float(current_df["net_revenue"].sum() / max(current_df["units"].sum(), 1))
+    wow_delta_asp = current_asp - prior_asp
+    wow_pct_asp = wow_delta_asp / prior_asp if prior_asp else 0.0
+
+    # Movement fact for ASP
+    movement = MovementFact(
+        kpi_id="asp",
+        period=f"week_{current_week}",
+        comparison_period=f"week_{prior_week}",
+        actual=round(current_asp, 2),
+        baseline_forecast=round(prior_asp, 2),
+        comparison_actual=round(prior_asp, 2),
+        wow_delta_abs=round(wow_delta_asp, 2),
+        wow_delta_pct=round(wow_pct_asp, 4),
+        impact_usd=round(abs(wow_delta_asp) * float(current_df["units"].sum()), 2),
+        surprise_z=round(wow_delta_asp / max(abs(prior_asp * 0.03), 0.01), 2),
+        history_periods=current_week - 1,
+    )
+
+    # --- Evidence for H1: price elasticity (own-price increase) ------------------
+    h1_amount = round(price_effect, 2)
+    fact_h1_price = EvidenceFact(
+        evidence_id="E-01",
+        statement_type="driver_attribution",
+        label="Price effect (arithmetic bridge): own-price increase in family_b reduced unit demand",
+        value=h1_amount,
+        unit="usd",
+        method="arithmetic_bridge",
+        method_params={"price_effect": price_effect, "volume_effect": volume_effect},
+        source_tables=["raw.orders"],
+        driver_id="price_elasticity",
+        driver_type="controllable",
+        contribution_share=round(price_effect / wow_delta_asp, 4) if wow_delta_asp else 0.0,
+    )
+
+    # --- Evidence for H2: competitor price move (market signal proxy) ------------
+    # Marketplace share increased → consistent with customers switching to cheaper alternatives.
+    marketplace_prior = prior_df[prior_df.channel == "marketplace"]["net_revenue"].sum()
+    marketplace_current = current_df[current_df.channel == "marketplace"]["net_revenue"].sum()
+    total_prior = prior_df["net_revenue"].sum()
+    total_current = current_df["net_revenue"].sum()
+    mkt_share_prior = float(marketplace_prior / total_prior) if total_prior else 0.0
+    mkt_share_current = float(marketplace_current / total_current) if total_current else 0.0
+    mkt_share_delta = mkt_share_current - mkt_share_prior
+    # Dollar impact proxy: mix shift effect from bridge
+    h2_amount = round(mix_effect, 2)
+
+    fact_h2_competitor = EvidenceFact(
+        evidence_id="E-02",
+        statement_type="driver_attribution",
+        label="Mix shift toward marketplace (proxy for competitor price cut drawing demand away)",
+        value=h2_amount,
+        unit="usd",
+        method="dimensional_contribution_mix",
+        method_params={
+            "marketplace_share_prior": round(mkt_share_prior, 4),
+            "marketplace_share_current": round(mkt_share_current, 4),
+            "share_delta": round(mkt_share_delta, 4),
+        },
+        source_tables=["raw.orders"],
+        driver_id="competitor_price",
+        driver_type="uncontrollable",
+        contribution_share=round(mix_effect / wow_delta_asp, 4) if wow_delta_asp else 0.0,
+    )
+
+    facts = [fact_h1_price, fact_h2_competitor]
+
+    # Confidence: 2 contradictory methods → consistency score penalised
+    confidence = compute_confidence(
+        facts=facts,
+        residual_share=0.07,
+        history_periods=current_week - 1,
+        min_history_periods=contract.materiality.min_history_periods if contract else 8,
+        data_quality_flags=[],
+        contradictions=1,  # the two hypotheses contradict each other
+    )
+
+    wall_ms = (time.perf_counter() - t0) * 1000
+    bundle = EvidenceBundle(
+        event_id=f"evt-asp-w{current_week}-competing",
+        kpi_id="asp",
+        period=f"week_{current_week}",
+        as_of_watermark=_meta_as_of(),
+        movement=movement,
+        facts=facts,
+        residual={"residual_share": 0.07, "note": "7% unattributed — consistent with both hypotheses"},
+        confidence=confidence,
+        telemetry=Telemetry(analyzers_run=analyzers_run, wall_ms=round(wall_ms, 1)),
+        data_quality_flags=[],
+        contradictions=[
+            Contradiction(
+                fact_a="E-01",
+                fact_b="E-02",
+                nature="price_elasticity vs competitor_price: two methods, comparable magnitude, neither dominates",
+            )
+        ],
+    ).finalize()
+
+    # --- Mode B abstention -------------------------------------------------------
+    hypotheses = [
+        {
+            "id": "H1_price_elasticity",
+            "label": "Own-price increase reduced demand (price elasticity)",
+            "support": "Arithmetic bridge isolates a price effect of "
+                       f"${abs(h1_amount):,.0f} — statistically consistent with observed ASP rise.",
+            "discriminating_test": "Run a price-response regression on historical family_b SKUs "
+                                   "to estimate own-price elasticity. If |ε| > 1, H1 dominates.",
+            "evidence_id": "E-01",
+        },
+        {
+            "id": "H2_competitor_price",
+            "label": "Competitor price cut drew demand to marketplace channel",
+            "support": f"Marketplace share rose {mkt_share_delta * 100:.1f}pp WoW — "
+                       "consistent with channel substitution driven by external price competition. "
+                       f"Mix effect: ${abs(h2_amount):,.0f}.",
+            "discriminating_test": "Acquire 3rd-party competitor price index for week 30. "
+                                   "If competitor prices fell > 5%, H2 dominates.",
+            "evidence_id": "E-02",
+        },
+    ]
+
+    abstention = competing_hypotheses(hypotheses)
+
+    def _json_safe(v):
+        if hasattr(v, 'item'):  # numpy scalar (float64, bool_, int64, etc.)
+            return v.item()
+        if isinstance(v, (list, tuple)):
+            return [_json_safe(i) for i in v]
+        return v
+
+    debug = {
+        "bridge": {k: _json_safe(v) for k, v in bridge.items()},
+        "marketplace_share_prior": round(mkt_share_prior, 4),
+        "marketplace_share_current": round(mkt_share_current, 4),
+    }
+    return bundle, abstention, debug

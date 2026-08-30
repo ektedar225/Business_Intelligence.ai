@@ -7,3 +7,5 @@ node_modules/
 venv/
 *.egg-info/
 6a882073d90c9_accenture_innovation_challenge_round_2_detailed_problem_statements_final.pdf
+.env
+

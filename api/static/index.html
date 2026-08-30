@@ -149,6 +149,21 @@
     </div>
   </div>
 
+  <div class="row">
+    <div class="col">
+      <div class="card">
+        <h2>Causal Inference — Difference-in-Differences (Promo ATE on Net Revenue)</h2>
+        <div id="causalPanel"><span class="muted">Loading causal estimate…</span></div>
+      </div>
+    </div>
+    <div class="col">
+      <div class="card">
+        <h2>Proactive Alerts (evaluated on every scenario load)</h2>
+        <div id="alertsPanel"><span class="muted">Alerts are evaluated on each scenario request and logged to console. Delivery stubs for email / Slack / Teams are in vantage/alerts.py.</span></div>
+      </div>
+    </div>
+  </div>
+
   <div class="footer-note">Prototype for Accenture Innovation Challenge 2026 — Round 2, Track 3 (BusinessIntelligence.ai). All figures are computed from synthetic data with injected ground truth.</div>
 </main>
 
@@ -169,6 +184,7 @@ const SCENARIOS = [
   {id:'1', label:'1 · Multi-factor movement'},
   {id:'2', label:'2 · Abstain (stale feed)'},
   {id:'3', label:'3 · Sparse history'},
+  {id:'4', label:'4 · Competing hypotheses'},
 ];
 
 function renderTabs() {
@@ -216,6 +232,29 @@ function renderNarrative(data) {
   const el = document.getElementById('narrativePanel');
   if (data.abstention) {
     const a = data.abstention;
+    // Mode B — Competing Hypotheses
+    if (a.mode === 'B_competing_hypotheses' && a.competing_hypotheses && a.competing_hypotheses.length) {
+      el.innerHTML = `
+        <div class="badge abstain">${a.mode}</div>
+        <div class="headline" style="margin-top:8px;">Abstained — Competing Hypotheses, Evidence Insufficient to Rank</div>
+        <div class="subline">${a.reliable_findings}</div>
+        <div class="why-item"><b>Blocker:</b> ${a.blocker}</div>
+        <div class="why-item"><b>What you can still do:</b> ${a.what_you_can_still_do}</div>
+        <div style="margin-top:14px; display:flex; gap:12px; flex-wrap:wrap;">
+          ${a.competing_hypotheses.map(h => `
+            <div style="flex:1; min-width:240px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; padding:12px;">
+              <div style="font-size:11px; color:var(--accent2); text-transform:uppercase; letter-spacing:.5px; margin-bottom:6px;">${h.id}</div>
+              <div style="font-weight:600; margin-bottom:6px;">${h.label}</div>
+              <div style="font-size:12.5px; color:var(--muted); margin-bottom:8px;">Support: ${h.support}</div>
+              <div style="font-size:12px; color:var(--warn);">🔬 Discriminating test: ${h.discriminating_test}</div>
+              ${h.evidence_id ? `<div style="margin-top:6px;"><span class="evidence-chip" onclick="showEvidence('${h.evidence_id}')">${h.evidence_id}</span></div>` : ''}
+            </div>`).join('')}
+        </div>
+        <div class="why-item" style="margin-top:10px;"><b>Resolution path:</b> ${a.resolution_path} <span class="muted">(owner: ${a.eta_or_owner})</span></div>
+      `;
+      return;
+    }
+    // Mode A / Mode C
     el.innerHTML = `
       <div class="badge abstain">${a.mode}</div>
       <div class="headline" style="margin-top:8px;">Abstained — evidence insufficient/contradictory</div>
@@ -348,11 +387,12 @@ async function loadNaive() {
 async function loadTelemetry() {
   const t = await jget('/api/telemetry');
   const el = document.getElementById('telemetryStrip');
+  const detShare = t.totals.deterministic_share != null ? (t.totals.deterministic_share * 100).toFixed(0) : '—';
   el.innerHTML = `
-    <span><b>${(t.totals.deterministic_share*100).toFixed(0)}%</b> deterministic</span>
+    <span><b>${detShare}%</b> deterministic</span>
     <span><b>${t.totals.total_model_calls}</b> model calls</span>
-    <span><b>$${t.totals.total_cost_usd.toFixed(3)}</b> cost</span>
-    <span><b>${t.totals.total_wall_ms}ms</b> total analyzer wall time</span>
+    <span><b>$${t.totals.total_cost_usd.toFixed(4)}</b> LLM cost</span>
+    <span><b>${t.totals.total_wall_ms.toFixed(0)}ms</b> total analyzer wall time</span>
   `;
 }
 
@@ -386,9 +426,33 @@ async function giveFeedback(driverId, polarity) {
   loadAudit();
 }
 
-function loadFeedbackPanel() {
+async function loadFeedbackPanel() {
   const el = document.getElementById('feedbackPanel');
-  el.innerHTML = `<span class="muted">Use 👍/👎 on an action above to accept or reject its driver. Weights persist across runs and re-rank future driver lists.</span>`;
+  try {
+    const data = await jget('/api/feedback/weights?limit=5');
+    const weights = data.weights;
+    const log = data.recent_log || [];
+    let html = '';
+    if (Object.keys(weights).length === 0) {
+      html += '<div class="muted" style="font-size:12.5px;">No feedback submitted yet. Use 👍/👎 on actions above to accept or reject drivers. Weights re-rank future driver lists via Beta-Bernoulli posterior.</div>';
+    } else {
+      html += '<table><tr><th>Driver</th><th>Accepted</th><th>Rejected</th><th>Posterior Weight</th></tr>';
+      Object.entries(weights).forEach(([d, w]) => {
+        html += `<tr><td>${d}</td><td>${w.accepted}</td><td>${w.rejected}</td><td><b>${w.posterior_weight}</b></td></tr>`;
+      });
+      html += '</table>';
+    }
+    if (log.length > 0) {
+      html += '<div style="margin-top:10px; font-size:11.5px; color:var(--muted);">Recent feedback events:</div>';
+      log.slice().reverse().forEach(e => {
+        const icon = e.polarity === 'accept' ? '👍' : '👎';
+        html += `<div style="font-size:11.5px; padding:3px 0; border-bottom:1px dashed var(--border);">${icon} <b>${e.driver_id}</b> · ${e.polarity} · ${e.analyst} · <span class="pill">${e.target || 'driver_ranking'}</span></div>`;
+      });
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<span class="muted">Could not load feedback weights.</span>';
+  }
 }
 
 async function askQuestion() {
@@ -412,7 +476,30 @@ async function askQuestion() {
   await loadScorecard();
   await loadNaive();
   await loadFeedbackPanel();
+  await loadCausal();
 })();
+
+async function loadCausal() {
+  try {
+    const c = await jget('/api/causal');
+    const el = document.getElementById('causalPanel');
+    if (!el) return;
+    const sign = c.ate_estimate >= 0 ? '+' : '';
+    el.innerHTML = `
+      <div class="kv"><span>Treatment</span><b style="font-size:11.5px;">${c.treatment}</b></div>
+      <div class="kv"><span>Method</span><b>${c.method}</b></div>
+      <div class="kv"><span>ATE Estimate</span><b style="color:${c.ate_estimate < 0 ? 'var(--bad)' : 'var(--good)'}">${sign}$${c.ate_estimate.toFixed(0)} ${c.ate_unit}</b></div>
+      <div class="kv"><span>95% CI</span><b>[$${c.ate_ci_lower.toFixed(0)}, $${c.ate_ci_upper.toFixed(0)}]</b></div>
+      <div class="kv"><span>Treated SKUs</span><b>${c.n_treated}</b></div>
+      <div class="kv"><span>Control SKUs</span><b>${c.n_control}</b></div>
+      <div style="margin-top:8px; font-size:11.5px; color:var(--warn);">⚠ ${c.limitations ? c.limitations[0] : ''}</div>
+      <div style="margin-top:4px; font-size:11.5px; color:var(--muted);">${c.parallel_trends_note}</div>
+    `;
+  } catch(e) {
+    const el = document.getElementById('causalPanel');
+    if (el) el.innerHTML = '<span class="muted">Could not load causal estimate.</span>';
+  }
+}
 </script>
 </body>
 </html>
