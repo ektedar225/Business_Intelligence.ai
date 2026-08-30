@@ -1,7 +1,17 @@
 {
   "channel_mix": {
+    "accepted": 6,
+    "rejected": 1,
+    "posterior_weight": 0.7778
+  },
+  "promo_calendar": {
+    "accepted": 9,
+    "rejected": 3,
+    "posterior_weight": 0.7143
+  },
+  "stockout_rate": {
     "accepted": 2,
-    "rejected": 0,
-    "posterior_weight": 0.75
+    "rejected": 6,
+    "posterior_weight": 0.3
   }
 }

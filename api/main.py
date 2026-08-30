@@ -37,6 +37,7 @@ from vantage.scorecard import recovery_scorecard
 from vantage.alerts import evaluate_alerts, deliver_alerts
 from vantage.drift import detect_data_drift, detect_driver_rank_drift
 from vantage.causal import estimate_promo_ate
+from vantage.llm import call_gemini
 
 app = FastAPI(title="VANTAGE — KPI Intelligence-to-Action Engine")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -85,7 +86,7 @@ def personas():
     return [p.model_dump() for p in get_persona_registry().all()]
 
 @app.get("/api/scenario/{scenario_id}")
-def scenario(scenario_id: str, persona_id: str = "cfo"):
+def scenario(scenario_id: str, persona_id: str = "cfo", use_llm: bool = True):
     t0 = time.perf_counter()
     personas = get_persona_registry()
     if persona_id not in personas.personas:
@@ -106,7 +107,7 @@ def scenario(scenario_id: str, persona_id: str = "cfo"):
         actions_payload = {"actions": [], "escalations": []}
         firewall = None
     else:
-        narrative = render_narrative(scoped, persona)
+        narrative = render_narrative(scoped, persona, use_llm=use_llm)
         verdict = verify_narrative(narrative, scoped)
         narrative_payload = {
             "headline": narrative.headline,
@@ -217,7 +218,17 @@ def submit_feedback(body: FeedbackIn):
         row_policy="n/a",
         feedback=structured,
     )
-    return {"structured": structured, "weights": feedback_mod.read_weights()}
+    weights = feedback_mod.read_weights()
+    updated_driver_weight = weights.get(body.driver_id, {})
+    return {
+        "structured": structured,
+        "weights": weights,
+        "driver_id": body.driver_id,
+        "polarity": body.polarity,
+        "posterior_weight": updated_driver_weight.get("posterior_weight", 0.5),
+        "accepted_count": updated_driver_weight.get("accepted", 0),
+        "rejected_count": updated_driver_weight.get("rejected", 0),
+    }
 
 @app.get("/api/audit")
 def get_audit(limit: int = 50):
@@ -225,15 +236,67 @@ def get_audit(limit: int = 50):
 
 class AskIn(BaseModel):
     text: str
+    scenario_id: str = "1"
+    persona_id: str = "cfo"
 
 @app.post("/api/ask")
 def ask(body: AskIn):
     kpi_id, abstention = resolve_intent(body.text)
     if abstention:
-        return {"resolved_kpi": None, "abstention": abstention.__dict__}
+        return {
+            "resolved_kpi": None,
+            "abstention": abstention.__dict__,
+            "answer": None,
+        }
     if kpi_id is None:
-        return {"resolved_kpi": None, "abstention": None, "message": "No registered KPI matched that question."}
-    return {"resolved_kpi": kpi_id, "abstention": None}
+        return {
+            "resolved_kpi": None,
+            "abstention": None,
+            "answer": None,
+            "message": "No registered KPI matched that question. Try asking about revenue, margin, units sold, or CAC.",
+        }
+
+    # Generate evidence-grounded conversational synthesis via Gemini
+    answer = None
+    try:
+        raw = _get_scenario_raw(body.scenario_id or "1")
+        bundle: EvidenceBundle = raw[0]
+        persona = get_persona_registry().get(body.persona_id or "cfo")
+        scoped = _scope_bundle(bundle, body.persona_id or "cfo")
+
+        m = scoped.movement
+        facts_summary = [
+            f"{f.label}: ${f.value:,.0f} ({f.method}) [{f.evidence_id}]"
+            for f in scoped.facts
+            if f.statement_type == "driver_attribution"
+        ]
+
+        direction = "fell" if m.wow_delta_abs < 0 else "rose"
+        system_instruction = f"""You are VANTAGE, an intelligent KPI executive assistant.
+Answer the user's question concisely based STRICTLY on the deterministic evidence bundle for '{kpi_id}':
+- Movement: {bundle.kpi_id.replace('_', ' ').title()} {direction} to ${m.actual:,.0f} in {m.period} (WoW change: ${abs(m.wow_delta_abs):,.0f} or {abs(m.wow_delta_pct):.1%}).
+- Verified Drivers: {'; '.join(facts_summary)}.
+- Confidence: {scoped.confidence.band.upper() if scoped.confidence else 'N/A'}.
+
+Requirements:
+1. Provide a direct, 2-3 sentence executive answer tailored for a {persona.display_name}.
+2. Always cite evidence tags like [E-01], [E-02] when referencing drivers.
+3. NEVER fabricate numbers or causal claims beyond the provided evidence."""
+
+        resp = call_gemini(
+            prompt=f"User question: '{body.text}'",
+            system_instruction=system_instruction,
+            temperature=0.1,
+            timeout_secs=6,
+        )
+        if resp.text:
+            answer = resp.text.strip()
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        answer = None
+
+    return {"resolved_kpi": kpi_id, "abstention": None, "answer": answer}
 
 @app.get("/api/telemetry")
 def telemetry():
