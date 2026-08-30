@@ -9,7 +9,7 @@
 
 ---
 
-## 🏛️ Core Design Philosophy
+## Core Design Philosophy
 
 ### 1. "The LLM Never Touches a Number"
 Language models, when unconstrained, hallucinate figures and invent spurious correlations. In VANTAGE:
@@ -39,7 +39,7 @@ Rather than hallucinating answers when signals are weak, VANTAGE treats **"We Do
 
 ---
 
-## ⚡ Architectural Layers
+## Architectural Layers
 
 VANTAGE is engineered as a layered pipeline (`vantage/`):
 
@@ -63,7 +63,7 @@ VANTAGE is engineered as a layered pipeline (`vantage/`):
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Environment Setup
 
@@ -103,7 +103,7 @@ Open **`http://127.0.0.1:8420`** in your browser.
 
 ---
 
-## 🖥️ Interactive Web Dashboard & Demo Scenarios
+## Interactive Web Dashboard & Demo Scenarios
 
 The browser dashboard demonstrates the full power of VANTAGE across four distinct scenarios:
 
@@ -116,13 +116,13 @@ The browser dashboard demonstrates the full power of VANTAGE across four distinc
 - **Persona Switcher**: Toggle between **CFO** (90-word executive summary), **Regional Sales Director** (region-masked, operational focus), and **Data Analyst** (full statistical grain).
 - **Clickable Evidence Drawer**: Click chips like `[E-01]` or `[E-02]` to view immutable source facts.
 - **Live Firewall Demo**: Click *"Run live violation-injection demo"* to watch the Numeric Firewall intercept and block synthetic hallucinations in real time.
-- **Bayesian Feedback Loop**: Click 👍 / 👎 on drivers to watch posterior weights update dynamically.
+- **Bayesian Feedback Loop**: Click Accept / Reject on drivers to watch posterior weights update dynamically.
 - **Causal DiD & Data Drift (PSI)**: Inspect econometric treatment effects and weekly population stability indices.
 - **Ask VANTAGE**: Natural language conversational entry point mapping questions directly to governed KPI contracts.
 
 ---
 
-## 📡 API Reference
+## API Reference
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
@@ -143,7 +143,7 @@ The browser dashboard demonstrates the full power of VANTAGE across four distinc
 
 ---
 
-## 🧪 Testing
+## Testing
 
 Run the full pytest suite:
 
@@ -155,7 +155,7 @@ All 15 unit and integration tests validate the attribution ladder, causal DiD, P
 
 ---
 
-## 📄 Proposal & Pitch Deck Generation
+## Proposal & Pitch Deck Generation
 
 Document generation scripts are available under `docs/`:
 
@@ -164,3 +164,4 @@ npm install
 node docs/build_proposal.js   # Generates VANTAGE_Business_Proposal.docx
 node docs/build_pitch.js      # Generates VANTAGE_Pitch_Deck.pptx
 ```
+
